@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>테니스 클럽 관리 시스템</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- 헤더 -->
+        <header class="header">
+            <div class="header-content">
+                <h1><i class="fas fa-tennis-ball"></i> Aqua Tennis Club</h1>
+                <nav class="nav-tabs">
+                    <button class="nav-tab active" data-tab="members">
+                        <i class="fas fa-users"></i> 회원관리
+                    </button>
+                    <button class="nav-tab" data-tab="courts">
+                        <i class="fas fa-map-marker-alt"></i> 코트관리
+                    </button>
+                    <button class="nav-tab" data-tab="reservations">
+                        <i class="fas fa-calendar-alt"></i> 예약관리
+                    </button>
+                    <button class="nav-tab" data-tab="balls">
+                        <i class="fas fa-tennis-ball"></i> 볼관리
+                    </button>
+                    <button class="nav-tab" data-tab="ball-usage">
+                        <i class="fas fa-history"></i> 볼사용기록
+                    </button>
+                </nav>
+            </div>
+        </header>
+
+        <!-- 메인 컨텐츠 -->
+        <main class="main-content">
+            <!-- 회원관리 섹션 -->
+            <section id="members" class="tab-content active">
+                <div class="section-header">
+                    <h2>회원 관리</h2>
+                    <button class="btn btn-primary" onclick="openMemberModal()">
+                        <i class="fas fa-plus"></i> 새 회원 추가
+                    </button>
+                </div>
+                <div class="search-bar">
+                    <input type="text" id="memberSearch" placeholder="회원명, 이메일, 회원번호로 검색...">
+                    <button class="btn btn-secondary" onclick="searchMembers()">
+                        <i class="fas fa-search"></i> 검색
+                    </button>
+                </div>
+                <div class="table-container">
+                    <table class="data-table" id="membersTable">
+                        <thead>
+                            <tr>
+                                <th>회원번호</th>
+                                <th>이름</th>
+                                <th>이메일</th>
+                                <th>전화번호</th>
+                                <th>멤버십</th>
+                                <th>기술수준</th>
+                                <th>상태</th>
+                                <th>작업</th>
+                            </tr>
+                        </thead>
+                        <tbody id="membersTableBody">
+                            <!-- 동적으로 생성됨 -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 코트관리 섹션 -->
+            <section id="courts" class="tab-content">
+                <div class="section-header">
+                    <h2>코트 관리</h2>
+                    <button class="btn btn-primary" onclick="openCourtModal()">
+                        <i class="fas fa-plus"></i> 새 코트 추가
+                    </button>
+                </div>
+                <div class="table-container">
+                    <table class="data-table" id="courtsTable">
+                        <thead>
+                            <tr>
+                                <th>코트번호</th>
+                                <th>코트명</th>
+                                <th>위치</th>
+                                <th>표면타입</th>
+                                <th>실내/실외</th>
+                                <th>시간당요금</th>
+                                <th>상태</th>
+                                <th>작업</th>
+                            </tr>
+                        </thead>
+                        <tbody id="courtsTableBody">
+                            <!-- 동적으로 생성됨 -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 예약관리 섹션 -->
+            <section id="reservations" class="tab-content">
+                <div class="section-header">
+                    <h2>예약 관리</h2>
+                    <button class="btn btn-primary" onclick="openReservationModal()">
+                        <i class="fas fa-plus"></i> 새 예약 추가
+                    </button>
+                </div>
+                <div class="filter-bar">
+                    <input type="date" id="reservationDateFilter" onchange="filterReservations()">
+                    <select id="courtFilter" onchange="filterReservations()">
+                        <option value="">모든 코트</option>
+                    </select>
+                    <select id="statusFilter" onchange="filterReservations()">
+                        <option value="">모든 상태</option>
+                        <option value="confirmed">확정</option>
+                        <option value="cancelled">취소</option>
+                        <option value="completed">완료</option>
+                        <option value="no_show">노쇼</option>
+                    </select>
+                </div>
+                <div class="table-container">
+                    <table class="data-table" id="reservationsTable">
+                        <thead>
+                            <tr>
+                                <th>예약번호</th>
+                                <th>회원명</th>
+                                <th>코트</th>
+                                <th>날짜</th>
+                                <th>시간</th>
+                                <th>게스트수</th>
+                                <th>금액</th>
+                                <th>상태</th>
+                                <th>작업</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reservationsTableBody">
+                            <!-- 동적으로 생성됨 -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 볼관리 섹션 -->
+            <section id="balls" class="tab-content">
+                <div class="section-header">
+                    <h2>테니스볼 관리</h2>
+                    <button class="btn btn-primary" onclick="openBallModal()">
+                        <i class="fas fa-plus"></i> 새 볼 추가
+                    </button>
+                </div>
+                <div class="table-container">
+                    <table class="data-table" id="ballsTable">
+                        <thead>
+                            <tr>
+                                <th>볼코드</th>
+                                <th>브랜드</th>
+                                <th>모델</th>
+                                <th>타입</th>
+                                <th>색상</th>
+                                <th>상태</th>
+                                <th>총수량</th>
+                                <th>사용가능</th>
+                                <th>사용중</th>
+                                <th>손상</th>
+                                <th>작업</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ballsTableBody">
+                            <!-- 동적으로 생성됨 -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 볼사용기록 섹션 -->
+            <section id="ball-usage" class="tab-content">
+                <div class="section-header">
+                    <h2>볼 사용 기록</h2>
+                    <button class="btn btn-primary" onclick="openBallUsageModal()">
+                        <i class="fas fa-plus"></i> 새 사용기록 추가
+                    </button>
+                </div>
+                <div class="filter-bar">
+                    <input type="date" id="usageDateFilter" onchange="filterBallUsage()">
+                    <select id="ballFilter" onchange="filterBallUsage()">
+                        <option value="">모든 볼</option>
+                    </select>
+                    <select id="memberFilter" onchange="filterBallUsage()">
+                        <option value="">모든 회원</option>
+                    </select>
+                </div>
+                <div class="table-container">
+                    <table class="data-table" id="ballUsageTable">
+                        <thead>
+                            <tr>
+                                <th>볼코드</th>
+                                <th>회원명</th>
+                                <th>코트</th>
+                                <th>사용날짜</th>
+                                <th>사용시간</th>
+                                <th>가져간볼</th>
+                                <th>반납된볼</th>
+                                <th>손상된볼</th>
+                                <th>분실된볼</th>
+                                <th>사용타입</th>
+                                <th>작업</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ballUsageTableBody">
+                            <!-- 동적으로 생성됨 -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- 모달들 -->
+    <!-- 회원 추가/수정 모달 -->
+    <div id="memberModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="memberModalTitle">새 회원 추가</h3>
+                <span class="close" onclick="closeMemberModal()">&times;</span>
+            </div>
+            <form id="memberForm">
+                <div class="form-group">
+                    <label for="memberCode">회원번호:</label>
+                    <input type="text" id="memberCode" required>
+                </div>
+                <div class="form-group">
+                    <label for="memberName">이름:</label>
+                    <input type="text" id="memberName" required>
+                </div>
+                <div class="form-group">
+                    <label for="memberEmail">이메일:</label>
+                    <input type="email" id="memberEmail" required>
+                </div>
+                <div class="form-group">
+                    <label for="memberPhone">전화번호:</label>
+                    <input type="tel" id="memberPhone">
+                </div>
+                <div class="form-group">
+                    <label for="memberBirthDate">생년월일:</label>
+                    <input type="date" id="memberBirthDate">
+                </div>
+                <div class="form-group">
+                    <label for="memberGender">성별:</label>
+                    <select id="memberGender">
+                        <option value="">선택하세요</option>
+                        <option value="male">남성</option>
+                        <option value="female">여성</option>
+                        <option value="other">기타</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="memberAddress">주소:</label>
+                    <textarea id="memberAddress"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="membershipType">멤버십 타입:</label>
+                    <select id="membershipType" required>
+                        <option value="regular">일반</option>
+                        <option value="premium">프리미엄</option>
+                        <option value="vip">VIP</option>
+                        <option value="student">학생</option>
+                        <option value="senior">시니어</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="membershipStartDate">멤버십 시작일:</label>
+                    <input type="date" id="membershipStartDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="membershipEndDate">멤버십 종료일:</label>
+                    <input type="date" id="membershipEndDate">
+                </div>
+                <div class="form-group">
+                    <label for="skillLevel">기술 수준:</label>
+                    <select id="skillLevel">
+                        <option value="beginner">초급</option>
+                        <option value="intermediate">중급</option>
+                        <option value="advanced">고급</option>
+                        <option value="professional">프로</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="emergencyContactName">비상연락처 이름:</label>
+                    <input type="text" id="emergencyContactName">
+                </div>
+                <div class="form-group">
+                    <label for="emergencyContactPhone">비상연락처 전화번호:</label>
+                    <input type="tel" id="emergencyContactPhone">
+                </div>
+                <div class="form-group">
+                    <label for="memberNotes">메모:</label>
+                    <textarea id="memberNotes"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeMemberModal()">취소</button>
+                    <button type="submit" class="btn btn-primary">저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 코트 추가/수정 모달 -->
+    <div id="courtModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="courtModalTitle">새 코트 추가</h3>
+                <span class="close" onclick="closeCourtModal()">&times;</span>
+            </div>
+            <form id="courtForm">
+                <div class="form-group">
+                    <label for="courtNumber">코트번호:</label>
+                    <input type="text" id="courtNumber" required>
+                </div>
+                <div class="form-group">
+                    <label for="courtName">코트명:</label>
+                    <input type="text" id="courtName" required>
+                </div>
+                <div class="form-group">
+                    <label for="courtLocation">위치:</label>
+                    <input type="text" id="courtLocation">
+                </div>
+                <div class="form-group">
+                    <label for="surfaceType">표면 타입:</label>
+                    <select id="surfaceType" required>
+                        <option value="hard">하드코트</option>
+                        <option value="clay">클레이코트</option>
+                        <option value="grass">잔디코트</option>
+                        <option value="synthetic">합성코트</option>
+                        <option value="indoor_hard">실내하드코트</option>
+                        <option value="indoor_clay">실내클레이코트</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="isIndoor">실내/실외:</label>
+                    <select id="isIndoor">
+                        <option value="false">실외</option>
+                        <option value="true">실내</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="lightingType">조명 타입:</label>
+                    <select id="lightingType">
+                        <option value="natural">자연광</option>
+                        <option value="led">LED</option>
+                        <option value="halogen">할로겐</option>
+                        <option value="none">없음</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="courtSize">코트 크기:</label>
+                    <select id="courtSize">
+                        <option value="standard">표준</option>
+                        <option value="mini">미니</option>
+                        <option value="practice">연습용</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="hourlyRate">시간당 요금:</label>
+                    <input type="number" id="hourlyRate" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label for="peakHourRate">피크 시간 요금:</label>
+                    <input type="number" id="peakHourRate" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label for="maxCapacity">최대 수용 인원:</label>
+                    <input type="number" id="maxCapacity" min="1" max="8" value="4">
+                </div>
+                <div class="form-group">
+                    <label for="courtNotes">메모:</label>
+                    <textarea id="courtNotes"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeCourtModal()">취소</button>
+                    <button type="submit" class="btn btn-primary">저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 예약 추가/수정 모달 -->
+    <div id="reservationModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="reservationModalTitle">새 예약 추가</h3>
+                <span class="close" onclick="closeReservationModal()">&times;</span>
+            </div>
+            <form id="reservationForm">
+                <div class="form-group">
+                    <label for="reservationCode">예약번호:</label>
+                    <input type="text" id="reservationCode" required>
+                </div>
+                <div class="form-group">
+                    <label for="reservationMember">회원:</label>
+                    <select id="reservationMember" required>
+                        <option value="">회원을 선택하세요</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="reservationCourt">코트:</label>
+                    <select id="reservationCourt" required>
+                        <option value="">코트를 선택하세요</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="reservationDate">예약 날짜:</label>
+                    <input type="date" id="reservationDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="startTime">시작 시간:</label>
+                    <input type="time" id="startTime" required>
+                </div>
+                <div class="form-group">
+                    <label for="endTime">종료 시간:</label>
+                    <input type="time" id="endTime" required>
+                </div>
+                <div class="form-group">
+                    <label for="guestCount">게스트 수:</label>
+                    <input type="number" id="guestCount" min="1" max="8" value="1">
+                </div>
+                <div class="form-group">
+                    <label for="specialRequests">특별 요청사항:</label>
+                    <textarea id="specialRequests"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeReservationModal()">취소</button>
+                    <button type="submit" class="btn btn-primary">저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 볼 추가/수정 모달 -->
+    <div id="ballModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="ballModalTitle">새 볼 추가</h3>
+                <span class="close" onclick="closeBallModal()">&times;</span>
+            </div>
+            <form id="ballForm">
+                <div class="form-group">
+                    <label for="ballCode">볼코드:</label>
+                    <input type="text" id="ballCode" required>
+                </div>
+                <div class="form-group">
+                    <label for="ballBrand">브랜드:</label>
+                    <input type="text" id="ballBrand" required>
+                </div>
+                <div class="form-group">
+                    <label for="ballModel">모델:</label>
+                    <input type="text" id="ballModel">
+                </div>
+                <div class="form-group">
+                    <label for="ballType">볼 타입:</label>
+                    <select id="ballType" required>
+                        <option value="regular">일반</option>
+                        <option value="pressureless">무압력</option>
+                        <option value="practice">연습용</option>
+                        <option value="tournament">대회용</option>
+                        <option value="junior">주니어</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="ballColor">색상:</label>
+                    <select id="ballColor">
+                        <option value="yellow">노란색</option>
+                        <option value="white">흰색</option>
+                        <option value="orange">주황색</option>
+                        <option value="green">초록색</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="conditionStatus">상태:</label>
+                    <select id="conditionStatus">
+                        <option value="new">새것</option>
+                        <option value="good">양호</option>
+                        <option value="fair">보통</option>
+                        <option value="poor">나쁨</option>
+                        <option value="damaged">손상</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="purchaseDate">구매일:</label>
+                    <input type="date" id="purchaseDate">
+                </div>
+                <div class="form-group">
+                    <label for="purchasePrice">구매가격:</label>
+                    <input type="number" id="purchasePrice" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label for="supplier">공급업체:</label>
+                    <input type="text" id="supplier">
+                </div>
+                <div class="form-group">
+                    <label for="quantityTotal">총 수량:</label>
+                    <input type="number" id="quantityTotal" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label for="storageLocation">보관 위치:</label>
+                    <input type="text" id="storageLocation">
+                </div>
+                <div class="form-group">
+                    <label for="ballNotes">메모:</label>
+                    <textarea id="ballNotes"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeBallModal()">취소</button>
+                    <button type="submit" class="btn btn-primary">저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 볼 사용기록 추가/수정 모달 -->
+    <div id="ballUsageModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="ballUsageModalTitle">새 사용기록 추가</h3>
+                <span class="close" onclick="closeBallUsageModal()">&times;</span>
+            </div>
+            <form id="ballUsageForm">
+                <div class="form-group">
+                    <label for="usageBall">볼:</label>
+                    <select id="usageBall" required>
+                        <option value="">볼을 선택하세요</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="usageMember">회원:</label>
+                    <select id="usageMember" required>
+                        <option value="">회원을 선택하세요</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="usageCourt">코트:</label>
+                    <select id="usageCourt">
+                        <option value="">코트를 선택하세요</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="usageReservation">예약:</label>
+                    <select id="usageReservation">
+                        <option value="">예약을 선택하세요</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="usageDate">사용 날짜:</label>
+                    <input type="date" id="usageDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="usageStartTime">시작 시간:</label>
+                    <input type="time" id="usageStartTime">
+                </div>
+                <div class="form-group">
+                    <label for="usageEndTime">종료 시간:</label>
+                    <input type="time" id="usageEndTime">
+                </div>
+                <div class="form-group">
+                    <label for="ballsTaken">가져간 볼 수:</label>
+                    <input type="number" id="ballsTaken" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label for="ballsReturned">반납된 볼 수:</label>
+                    <input type="number" id="ballsReturned" min="0" value="0">
+                </div>
+                <div class="form-group">
+                    <label for="ballsDamaged">손상된 볼 수:</label>
+                    <input type="number" id="ballsDamaged" min="0" value="0">
+                </div>
+                <div class="form-group">
+                    <label for="ballsLost">분실된 볼 수:</label>
+                    <input type="number" id="ballsLost" min="0" value="0">
+                </div>
+                <div class="form-group">
+                    <label for="usageType">사용 타입:</label>
+                    <select id="usageType">
+                        <option value="rental">대여</option>
+                        <option value="practice">연습</option>
+                        <option value="lesson">레슨</option>
+                        <option value="tournament">대회</option>
+                        <option value="maintenance">유지보수</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="conditionBefore">사용 전 상태:</label>
+                    <select id="conditionBefore">
+                        <option value="new">새것</option>
+                        <option value="good">양호</option>
+                        <option value="fair">보통</option>
+                        <option value="poor">나쁨</option>
+                        <option value="damaged">손상</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="conditionAfter">사용 후 상태:</label>
+                    <select id="conditionAfter">
+                        <option value="new">새것</option>
+                        <option value="good">양호</option>
+                        <option value="fair">보통</option>
+                        <option value="poor">나쁨</option>
+                        <option value="damaged">손상</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="usageNotes">메모:</label>
+                    <textarea id="usageNotes"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeBallUsageModal()">취소</button>
+                    <button type="submit" class="btn btn-primary">저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 로딩 오버레이 -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>로딩 중...</p>
+        </div>
+    </div>
+
+    <!-- 알림 메시지 -->
+    <div id="notification" class="notification"></div>
+
+    <!-- Supabase CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="script.js"></script>
+</body>
+</html>
