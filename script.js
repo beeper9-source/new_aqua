@@ -23,6 +23,10 @@ async function initializeApp() {
     try {
         await loadAllData();
         setupEventListeners();
+        
+        // 예약관리 탭을 기본으로 활성화하고 데이터 렌더링
+        await switchTab('reservations');
+        
         showNotification('앱이 성공적으로 로드되었습니다.', 'success');
     } catch (error) {
         console.error('앱 초기화 오류:', error);
@@ -35,19 +39,13 @@ async function initializeApp() {
 // 모든 데이터 로드
 async function loadAllData() {
     try {
-        const [membersData, courtsData, reservationsData, ballsData, ballUsageData] = await Promise.all([
+        await Promise.all([
             loadMembers(),
             loadCourts(),
             loadReservations(),
             loadBalls(),
             loadBallUsage()
         ]);
-        
-        members = membersData;
-        courts = courtsData;
-        reservations = reservationsData;
-        balls = ballsData;
-        ballUsage = ballUsageData;
         
         updateSelectOptions();
     } catch (error) {
@@ -91,7 +89,7 @@ function setupEventListeners() {
 }
 
 // 탭 전환
-function switchTab(tabName) {
+async function switchTab(tabName) {
     // 모든 탭 비활성화
     document.querySelectorAll('.nav-tab').forEach(tab => {
         tab.classList.remove('active');
@@ -105,6 +103,43 @@ function switchTab(tabName) {
     document.getElementById(tabName).classList.add('active');
     
     currentTab = tabName;
+    
+    // 탭별 데이터 조회 및 테이블 렌더링
+    try {
+        showLoading(true);
+        
+        switch(tabName) {
+            case 'members':
+                await loadMembers();
+                renderMembersTable();
+                break;
+            case 'courts':
+                await loadCourts();
+                renderCourtsTable();
+                break;
+            case 'reservations':
+                await loadReservations();
+                renderReservationsTable();
+                break;
+            case 'balls':
+                await loadBalls();
+                renderBallsTable();
+                break;
+            case 'ball-usage':
+                await loadBallUsage();
+                renderBallUsageTable();
+                break;
+        }
+        
+        // 셀렉트 옵션 업데이트 (필요한 경우)
+        updateSelectOptions();
+        
+    } catch (error) {
+        console.error(`${tabName} 탭 데이터 로드 오류:`, error);
+        showNotification(`${tabName} 데이터 로드 중 오류가 발생했습니다.`, 'error');
+    } finally {
+        showLoading(false);
+    }
 }
 
 // 로딩 표시
@@ -125,17 +160,90 @@ function showNotification(message, type = 'info') {
     }, 3000);
 }
 
-// ==================== 회원 관리 ====================
+// 예약조 변경 시 코트번호 옵션 업데이트
+function updateCourtNumberOptions() {
+    const reservationGroup = document.getElementById('reservationGroup').value;
+    const courtNumberSelect = document.getElementById('courtNumber');
+    
+    // 기존 옵션 제거
+    courtNumberSelect.innerHTML = '<option value="">선택하세요</option>';
+    
+    if (reservationGroup === 'N/A') {
+        // 예약조가 N/A이면 코트번호도 N/A만 선택 가능
+        const option = document.createElement('option');
+        option.value = 'N/A';
+        option.textContent = 'N/A';
+        courtNumberSelect.appendChild(option);
+        
+        // 자동으로 N/A 선택
+        courtNumberSelect.value = 'N/A';
+    } else {
+        // 예약조가 정상이면 모든 코트번호 선택 가능
+        const courtOptions = [
+            { value: '1', text: '1번' },
+            { value: '2', text: '2번' },
+            { value: '3', text: '3번' },
+            { value: '4', text: '4번' },
+            { value: '5', text: '5번' },
+            { value: '6', text: '6번' },
+            { value: 'N/A', text: 'N/A' }
+        ];
+        
+        courtOptions.forEach(court => {
+            const option = document.createElement('option');
+            option.value = court.value;
+            option.textContent = court.text;
+            courtNumberSelect.appendChild(option);
+        });
+    }
+}
+async function generateMemberCode() {
+    try {
+        // 현재 연도 가져오기
+        const currentYear = new Date().getFullYear();
+        
+        // 모든 회원번호 조회 (AQ 형식과 MEM 형식 모두 고려)
+        const { data, error } = await supabase
+            .from('aq_members')
+            .select('member_code')
+            .order('member_code', { ascending: false });
+        
+        if (error) throw error;
+        
+        // AQ 형식의 회원번호 찾기
+        const aqCodes = data.filter(code => code.member_code.startsWith(`AQ${currentYear}`));
+        
+        let nextNumber = 1;
+        if (aqCodes.length > 0) {
+            // 가장 큰 번호에서 +1
+            const lastCode = aqCodes[0].member_code;
+            const lastNumber = parseInt(lastCode.substring(6)); // AQ2024 뒤의 숫자 추출
+            nextNumber = lastNumber + 1;
+        }
+        
+        // 3자리 숫자로 포맷팅
+        return `AQ${currentYear}${nextNumber.toString().padStart(3, '0')}`;
+        
+    } catch (error) {
+        console.error('회원번호 생성 오류:', error);
+        // 오류 시 기본 번호 반환
+        const currentYear = new Date().getFullYear();
+        return `AQ${currentYear}001`;
+    }
+}
 
 // 회원 데이터 로드
 async function loadMembers() {
     const { data, error } = await supabase
         .from('aq_members')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('reservation_group', { ascending: true })
+        .order('court_number', { ascending: true })
+        .order('member_code', { ascending: true });
     
     if (error) throw error;
-    return data || [];
+    members = data || [];
+    return members;
 }
 
 // 회원 테이블 렌더링
@@ -146,10 +254,10 @@ function renderMembersTable() {
     members.forEach(member => {
         const row = document.createElement('tr');
         row.innerHTML = `
+            <td>${member.reservation_group}</td>
+            <td>${member.court_number || '-'}</td>
             <td>${member.member_code}</td>
             <td>${member.name}</td>
-            <td>${member.email}</td>
-            <td>${member.phone || '-'}</td>
             <td>${getMembershipTypeText(member.membership_type)}</td>
             <td>${getSkillLevelText(member.skill_level)}</td>
             <td><span class="status-badge ${member.is_active ? 'status-active' : 'status-inactive'}">${member.is_active ? '활성' : '비활성'}</span></td>
@@ -167,7 +275,7 @@ function renderMembersTable() {
 }
 
 // 회원 모달 열기
-function openMemberModal(memberId = null) {
+async function openMemberModal(memberId = null) {
     editingId = memberId;
     const modal = document.getElementById('memberModal');
     const title = document.getElementById('memberModalTitle');
@@ -181,8 +289,21 @@ function openMemberModal(memberId = null) {
     } else {
         title.textContent = '새 회원 추가';
         document.getElementById('memberForm').reset();
+        
+        // 새 회원 추가 시 자동으로 회원번호 생성
+        const memberCode = await generateMemberCode();
+        document.getElementById('memberCode').value = memberCode;
+        
         document.getElementById('membershipStartDate').value = new Date().toISOString().split('T')[0];
     }
+    
+    // 예약조 변경 이벤트 리스너 추가
+    const reservationGroupSelect = document.getElementById('reservationGroup');
+    reservationGroupSelect.removeEventListener('change', updateCourtNumberOptions);
+    reservationGroupSelect.addEventListener('change', updateCourtNumberOptions);
+    
+    // 초기 코트번호 옵션 설정
+    updateCourtNumberOptions();
     
     modal.style.display = 'block';
 }
@@ -197,8 +318,14 @@ function closeMemberModal() {
 function fillMemberForm(member) {
     document.getElementById('memberCode').value = member.member_code;
     document.getElementById('memberName').value = member.name;
-    document.getElementById('memberEmail').value = member.email;
-    document.getElementById('memberPhone').value = member.phone || '';
+    document.getElementById('reservationGroup').value = member.reservation_group;
+    
+    // 예약조에 따라 코트번호 옵션 업데이트
+    updateCourtNumberOptions();
+    
+    // 코트번호 설정 (옵션 업데이트 후)
+    document.getElementById('courtNumber').value = member.court_number || '';
+    
     document.getElementById('memberBirthDate').value = member.birth_date || '';
     document.getElementById('memberGender').value = member.gender || '';
     document.getElementById('memberAddress').value = member.address || '';
@@ -215,11 +342,18 @@ function fillMemberForm(member) {
 async function handleMemberSubmit(e) {
     e.preventDefault();
     
+    let memberCode = document.getElementById('memberCode').value;
+    
+    // 회원번호가 비어있으면 자동 생성
+    if (!memberCode) {
+        memberCode = await generateMemberCode();
+    }
+    
     const formData = {
-        member_code: document.getElementById('memberCode').value,
+        member_code: memberCode,
         name: document.getElementById('memberName').value,
-        email: document.getElementById('memberEmail').value,
-        phone: document.getElementById('memberPhone').value || null,
+        reservation_group: document.getElementById('reservationGroup').value,
+        court_number: document.getElementById('courtNumber').value || null,
         birth_date: document.getElementById('memberBirthDate').value || null,
         gender: document.getElementById('memberGender').value || null,
         address: document.getElementById('memberAddress').value || null,
@@ -300,7 +434,8 @@ function searchMembers() {
     const searchTerm = document.getElementById('memberSearch').value.toLowerCase();
     const filteredMembers = members.filter(member => 
         member.name.toLowerCase().includes(searchTerm) ||
-        member.email.toLowerCase().includes(searchTerm) ||
+        member.reservation_group.toLowerCase().includes(searchTerm) ||
+        member.court_number.toLowerCase().includes(searchTerm) ||
         member.member_code.toLowerCase().includes(searchTerm)
     );
     
@@ -310,10 +445,10 @@ function searchMembers() {
     filteredMembers.forEach(member => {
         const row = document.createElement('tr');
         row.innerHTML = `
+            <td>${member.reservation_group}</td>
+            <td>${member.court_number || '-'}</td>
             <td>${member.member_code}</td>
             <td>${member.name}</td>
-            <td>${member.email}</td>
-            <td>${member.phone || '-'}</td>
             <td>${getMembershipTypeText(member.membership_type)}</td>
             <td>${getSkillLevelText(member.skill_level)}</td>
             <td><span class="status-badge ${member.is_active ? 'status-active' : 'status-inactive'}">${member.is_active ? '활성' : '비활성'}</span></td>
@@ -340,7 +475,8 @@ async function loadCourts() {
         .order('court_number', { ascending: true });
     
     if (error) throw error;
-    return data || [];
+    courts = data || [];
+    return courts;
 }
 
 // 코트 테이블 렌더링
@@ -501,13 +637,14 @@ async function loadReservations() {
         .from('aq_reservations')
         .select(`
             *,
-            member:aq_members!member_id(name, member_code),
-            court:aq_courts(name, court_number)
+            aq_members!member_id(name, member_code),
+            aq_courts!court_id(name, court_number)
         `)
         .order('reservation_date', { ascending: false });
     
     if (error) throw error;
-    return data || [];
+    reservations = data || [];
+    return reservations;
 }
 
 // 예약 테이블 렌더링
@@ -519,9 +656,10 @@ function renderReservationsTable() {
         const row = document.createElement('tr');
         row.innerHTML = `
             <td>${reservation.reservation_code}</td>
-            <td>${reservation.member.name} (${reservation.member.member_code})</td>
-            <td>${reservation.court.name} (${reservation.court.court_number})</td>
+            <td>${reservation.aq_members?.name || '알 수 없는 회원'} (${reservation.aq_members?.member_code || '-'})</td>
+            <td>${reservation.aq_courts?.name || '알 수 없는 코트'} (${reservation.aq_courts?.court_number || '-'})</td>
             <td>${reservation.reservation_date}</td>
+            <td>${reservation.game_date || '-'}</td>
             <td>${reservation.start_time} - ${reservation.end_time}</td>
             <td>${reservation.guest_count}명</td>
             <td>₩${reservation.total_amount.toLocaleString()}</td>
@@ -539,8 +677,72 @@ function renderReservationsTable() {
     });
 }
 
+// 시작시간으로부터 종료시간 계산 (2시간 후)
+function calculateEndTime(startTime) {
+    if (!startTime) return '';
+    
+    const [hours, minutes] = startTime.split(':').map(Number);
+    const startMinutes = hours * 60 + minutes;
+    const endMinutes = startMinutes + 120; // 2시간 = 120분
+    
+    const endHours = Math.floor(endMinutes / 60);
+    const endMins = endMinutes % 60;
+    
+    return `${endHours.toString().padStart(2, '0')}:${endMins.toString().padStart(2, '0')}`;
+}
+function updateGameDate() {
+    const reservationDate = document.getElementById('reservationDate').value;
+    if (reservationDate) {
+        const reservationDateObj = new Date(reservationDate);
+        const gameDateObj = new Date(reservationDateObj);
+        gameDateObj.setDate(gameDateObj.getDate() + 3); // 예약일 + 3일
+        
+        const gameDate = gameDateObj.toISOString().split('T')[0];
+        document.getElementById('gameDate').value = gameDate;
+    } else {
+        document.getElementById('gameDate').value = '';
+    }
+}
+async function generateReservationCode() {
+    try {
+        // 현재 연도와 월 가져오기
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = (now.getMonth() + 1).toString().padStart(2, '0');
+        
+        // 해당 연월의 기존 예약번호들 조회
+        const { data, error } = await supabase
+            .from('aq_reservations')
+            .select('reservation_code')
+            .like('reservation_code', `RES${year}${month}%`)
+            .order('reservation_code', { ascending: false });
+        
+        if (error) throw error;
+        
+        // 다음 번호 계산
+        let nextNumber = 1;
+        if (data && data.length > 0) {
+            // 가장 큰 번호에서 +1
+            const lastCode = data[0].reservation_code;
+            const lastNumber = parseInt(lastCode.substring(9)); // RES202412 뒤의 숫자 추출
+            nextNumber = lastNumber + 1;
+        }
+        
+        // 3자리 숫자로 포맷팅
+        return `RES${year}${month}${nextNumber.toString().padStart(3, '0')}`;
+        
+    } catch (error) {
+        console.error('예약번호 생성 오류:', error);
+        // 오류 시 기본 번호 반환
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = (now.getMonth() + 1).toString().padStart(2, '0');
+        return `RES${year}${month}001`;
+    }
+}
+
 // 예약 모달 열기
-function openReservationModal(reservationId = null) {
+async function openReservationModal(reservationId = null) {
     editingId = reservationId;
     const modal = document.getElementById('reservationModal');
     const title = document.getElementById('reservationModalTitle');
@@ -554,7 +756,26 @@ function openReservationModal(reservationId = null) {
     } else {
         title.textContent = '새 예약 추가';
         document.getElementById('reservationForm').reset();
-        document.getElementById('reservationDate').value = new Date().toISOString().split('T')[0];
+        
+        // 새 예약 추가 시 자동으로 예약번호 생성
+        const reservationCode = await generateReservationCode();
+        document.getElementById('reservationCode').value = reservationCode;
+        
+        // 내일 날짜로 설정
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        document.getElementById('reservationDate').value = tomorrow.toISOString().split('T')[0];
+        
+        // 시간 디폴트를 8시로 설정
+        document.getElementById('startTime').value = '08:00';
+        
+        // 예약일 변경 이벤트 리스너 추가
+        const reservationDateInput = document.getElementById('reservationDate');
+        reservationDateInput.removeEventListener('change', updateGameDate);
+        reservationDateInput.addEventListener('change', updateGameDate);
+        
+        // 초기 경기일 설정
+        updateGameDate();
     }
     
     modal.style.display = 'block';
@@ -572,28 +793,80 @@ function fillReservationForm(reservation) {
     document.getElementById('reservationMember').value = reservation.member_id;
     document.getElementById('reservationCourt').value = reservation.court_id;
     document.getElementById('reservationDate').value = reservation.reservation_date;
+    document.getElementById('gameDate').value = reservation.game_date || '';
     document.getElementById('startTime').value = reservation.start_time;
-    document.getElementById('endTime').value = reservation.end_time;
     document.getElementById('guestCount').value = reservation.guest_count;
     document.getElementById('specialRequests').value = reservation.special_requests || '';
+    
+    // 예약일 변경 이벤트 리스너 추가
+    const reservationDateInput = document.getElementById('reservationDate');
+    reservationDateInput.removeEventListener('change', updateGameDate);
+    reservationDateInput.addEventListener('change', updateGameDate);
+}
+
+// 예약 중복 체크
+async function checkReservationConflict(courtId, reservationDate, startTime, endTime, excludeId = null) {
+    try {
+        let query = supabase
+            .from('aq_reservations')
+            .select('id, reservation_code, start_time, end_time')
+            .eq('court_id', courtId)
+            .eq('reservation_date', reservationDate)
+            .in('reservation_status', ['confirmed', 'pending']); // 확정되거나 대기 중인 예약만 체크
+        
+        if (excludeId) {
+            query = query.neq('id', excludeId);
+        }
+        
+        const { data, error } = await query;
+        
+        if (error) throw error;
+        
+        // 시간 겹침 체크
+        for (const reservation of data || []) {
+            const existingStart = reservation.start_time;
+            const existingEnd = reservation.end_time;
+            
+            // 시간이 겹치는지 체크
+            if ((startTime < existingEnd && endTime > existingStart)) {
+                return {
+                    conflict: true,
+                    conflictingReservation: reservation
+                };
+            }
+        }
+        
+        return { conflict: false };
+        
+    } catch (error) {
+        console.error('예약 중복 체크 오류:', error);
+        return { conflict: false }; // 오류 시 체크를 건너뛰고 진행
+    }
 }
 
 // 예약 폼 제출 처리
 async function handleReservationSubmit(e) {
     e.preventDefault();
     
+    let reservationCode = document.getElementById('reservationCode').value;
+    
+    // 예약번호가 비어있으면 자동 생성
+    if (!reservationCode) {
+        reservationCode = await generateReservationCode();
+    }
+    
     const startTime = document.getElementById('startTime').value;
-    const endTime = document.getElementById('endTime').value;
-    const duration = calculateDuration(startTime, endTime);
+    const endTime = calculateEndTime(startTime); // 시작시간 + 2시간
     
     const formData = {
-        reservation_code: document.getElementById('reservationCode').value,
+        reservation_code: reservationCode,
         member_id: document.getElementById('reservationMember').value,
         court_id: document.getElementById('reservationCourt').value,
         reservation_date: document.getElementById('reservationDate').value,
+        game_date: document.getElementById('gameDate').value,
         start_time: startTime,
         end_time: endTime,
-        duration_hours: duration,
+        duration_hours: 2, // 고정 2시간
         guest_count: parseInt(document.getElementById('guestCount').value),
         special_requests: document.getElementById('specialRequests').value || null
     };
@@ -601,12 +874,49 @@ async function handleReservationSubmit(e) {
     try {
         showLoading(true);
         
-        if (editingId) {
-        const { error } = await supabase
-            .from('aq_reservations')
-            .update(formData)
-            .eq('id', editingId);
+        // 새 예약 추가 시에만 중복 체크
+        if (!editingId) {
+            const conflictCheck = await checkReservationConflict(
+                formData.court_id,
+                formData.reservation_date,
+                formData.start_time,
+                formData.end_time
+            );
             
+            if (conflictCheck.conflict) {
+                const conflictingReservation = conflictCheck.conflictingReservation;
+                showNotification(
+                    `해당 코트의 ${formData.start_time}-${formData.end_time} 시간대에 이미 예약이 있습니다. (예약번호: ${conflictingReservation.reservation_code})`,
+                    'error'
+                );
+                return;
+            }
+        }
+        
+        if (editingId) {
+            // 수정 시에도 중복 체크 (자기 자신 제외)
+            const conflictCheck = await checkReservationConflict(
+                formData.court_id,
+                formData.reservation_date,
+                formData.start_time,
+                formData.end_time,
+                editingId
+            );
+            
+            if (conflictCheck.conflict) {
+                const conflictingReservation = conflictCheck.conflictingReservation;
+                showNotification(
+                    `해당 코트의 ${formData.start_time}-${formData.end_time} 시간대에 이미 예약이 있습니다. (예약번호: ${conflictingReservation.reservation_code})`,
+                    'error'
+                );
+                return;
+            }
+            
+            const { error } = await supabase
+                .from('aq_reservations')
+                .update(formData)
+                .eq('id', editingId);
+                
             if (error) throw error;
             showNotification('예약이 성공적으로 수정되었습니다.', 'success');
         } else {
@@ -624,7 +934,17 @@ async function handleReservationSubmit(e) {
         
     } catch (error) {
         console.error('예약 저장 오류:', error);
-        showNotification('예약 저장 중 오류가 발생했습니다.', 'error');
+        
+        // 데이터베이스 제약조건 위반 에러 처리
+        if (error.code === '23505') {
+            if (error.message.includes('idx_aq_reservations_court_time_unique')) {
+                showNotification('해당 코트의 해당 시간대에 이미 예약이 있습니다. 다른 시간을 선택해주세요.', 'error');
+            } else {
+                showNotification('중복된 데이터가 있습니다. 다시 확인해주세요.', 'error');
+            }
+        } else {
+            showNotification('예약 저장 중 오류가 발생했습니다.', 'error');
+        }
     } finally {
         showLoading(false);
     }
@@ -718,7 +1038,8 @@ async function loadBalls() {
         .order('created_at', { ascending: false });
     
     if (error) throw error;
-    return data || [];
+    balls = data || [];
+    return balls;
 }
 
 // 볼 테이블 렌더링
@@ -892,7 +1213,8 @@ async function loadBallUsage() {
         .order('usage_date', { ascending: false });
     
     if (error) throw error;
-    return data || [];
+    ballUsage = data || [];
+    return ballUsage;
 }
 
 // 볼 사용기록 테이블 렌더링
@@ -1177,7 +1499,8 @@ function updateSelectOptions() {
         reservations.forEach(reservation => {
             const option = document.createElement('option');
             option.value = reservation.id;
-            option.textContent = `${reservation.reservation_code} - ${reservation.AQ_members.name}`;
+            const memberName = reservation.aq_members?.name || '알 수 없는 회원';
+            option.textContent = `${reservation.reservation_code} - ${memberName}`;
             reservationSelect.appendChild(option);
         });
     }

@@ -14,14 +14,14 @@
             <div class="header-content">
                 <h1><i class="fas fa-tennis-ball"></i> Aqua Tennis Club</h1>
                 <nav class="nav-tabs">
-                    <button class="nav-tab active" data-tab="members">
+                    <button class="nav-tab active" data-tab="reservations">
+                        <i class="fas fa-calendar-alt"></i> 예약관리
+                    </button>
+                    <button class="nav-tab" data-tab="members">
                         <i class="fas fa-users"></i> 회원관리
                     </button>
                     <button class="nav-tab" data-tab="courts">
                         <i class="fas fa-map-marker-alt"></i> 코트관리
-                    </button>
-                    <button class="nav-tab" data-tab="reservations">
-                        <i class="fas fa-calendar-alt"></i> 예약관리
                     </button>
                     <button class="nav-tab" data-tab="balls">
                         <i class="fas fa-tennis-ball"></i> 볼관리
@@ -36,7 +36,7 @@
         <!-- 메인 컨텐츠 -->
         <main class="main-content">
             <!-- 회원관리 섹션 -->
-            <section id="members" class="tab-content active">
+            <section id="members" class="tab-content">
                 <div class="section-header">
                     <h2>회원 관리</h2>
                     <button class="btn btn-primary" onclick="openMemberModal()">
@@ -44,7 +44,7 @@
                     </button>
                 </div>
                 <div class="search-bar">
-                    <input type="text" id="memberSearch" placeholder="회원명, 이메일, 회원번호로 검색...">
+                    <input type="text" id="memberSearch" placeholder="예약조, 코트번호, 회원명으로 검색...">
                     <button class="btn btn-secondary" onclick="searchMembers()">
                         <i class="fas fa-search"></i> 검색
                     </button>
@@ -53,10 +53,10 @@
                     <table class="data-table" id="membersTable">
                         <thead>
                             <tr>
+                                <th>예약조</th>
+                                <th>코트번호</th>
                                 <th>회원번호</th>
                                 <th>이름</th>
-                                <th>이메일</th>
-                                <th>전화번호</th>
                                 <th>멤버십</th>
                                 <th>기술수준</th>
                                 <th>상태</th>
@@ -100,7 +100,7 @@
             </section>
 
             <!-- 예약관리 섹션 -->
-            <section id="reservations" class="tab-content">
+            <section id="reservations" class="tab-content active">
                 <div class="section-header">
                     <h2>예약 관리</h2>
                     <button class="btn btn-primary" onclick="openReservationModal()">
@@ -127,9 +127,10 @@
                                 <th>예약번호</th>
                                 <th>회원명</th>
                                 <th>코트</th>
-                                <th>날짜</th>
+                                <th>예약일</th>
+                                <th>경기일</th>
                                 <th>시간</th>
-                                <th>게스트수</th>
+                                <th>참가자 수</th>
                                 <th>금액</th>
                                 <th>상태</th>
                                 <th>작업</th>
@@ -228,19 +229,35 @@
             <form id="memberForm">
                 <div class="form-group">
                     <label for="memberCode">회원번호:</label>
-                    <input type="text" id="memberCode" required>
+                    <input type="text" id="memberCode" readonly>
                 </div>
                 <div class="form-group">
                     <label for="memberName">이름:</label>
                     <input type="text" id="memberName" required>
                 </div>
                 <div class="form-group">
-                    <label for="memberEmail">이메일:</label>
-                    <input type="email" id="memberEmail" required>
+                    <label for="reservationGroup">예약조:</label>
+                    <select id="reservationGroup" required>
+                        <option value="">선택하세요</option>
+                        <option value="1주차">1주차</option>
+                        <option value="2주차">2주차</option>
+                        <option value="3주차">3주차</option>
+                        <option value="4주차">4주차</option>
+                        <option value="N/A">N/A</option>
+                    </select>
                 </div>
                 <div class="form-group">
-                    <label for="memberPhone">전화번호:</label>
-                    <input type="tel" id="memberPhone">
+                    <label for="courtNumber">코트번호:</label>
+                    <select id="courtNumber">
+                        <option value="">선택하세요</option>
+                        <option value="1">1번</option>
+                        <option value="2">2번</option>
+                        <option value="3">3번</option>
+                        <option value="4">4번</option>
+                        <option value="5">5번</option>
+                        <option value="6">6번</option>
+                        <option value="N/A">N/A</option>
+                    </select>
                 </div>
                 <div class="form-group">
                     <label for="memberBirthDate">생년월일:</label>
@@ -395,7 +412,7 @@
             <form id="reservationForm">
                 <div class="form-group">
                     <label for="reservationCode">예약번호:</label>
-                    <input type="text" id="reservationCode" required>
+                    <input type="text" id="reservationCode" readonly>
                 </div>
                 <div class="form-group">
                     <label for="reservationMember">회원:</label>
@@ -410,20 +427,31 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="reservationDate">예약 날짜:</label>
+                    <label for="reservationDate">예약일 (아침 7시 정각):</label>
                     <input type="date" id="reservationDate" required>
                 </div>
                 <div class="form-group">
+                    <label for="gameDate">경기일:</label>
+                    <input type="date" id="gameDate" readonly>
+                </div>
+                <div class="form-group">
                     <label for="startTime">시작 시간:</label>
-                    <input type="time" id="startTime" required>
+                    <select id="startTime" required>
+                        <option value="">시간을 선택하세요</option>
+                        <option value="06:00">06:00</option>
+                        <option value="08:00">08:00</option>
+                        <option value="10:00">10:00</option>
+                        <option value="12:00">12:00</option>
+                        <option value="14:00">14:00</option>
+                        <option value="16:00">16:00</option>
+                        <option value="18:00">18:00</option>
+                        <option value="20:00">20:00</option>
+                        <option value="22:00">22:00</option>
+                    </select>
                 </div>
                 <div class="form-group">
-                    <label for="endTime">종료 시간:</label>
-                    <input type="time" id="endTime" required>
-                </div>
-                <div class="form-group">
-                    <label for="guestCount">게스트 수:</label>
-                    <input type="number" id="guestCount" min="1" max="8" value="1">
+                    <label for="guestCount">참가자 수:</label>
+                    <input type="number" id="guestCount" min="1" max="8" value="4">
                 </div>
                 <div class="form-group">
                     <label for="specialRequests">특별 요청사항:</label>
@@ -636,3 +664,4 @@
     <script src="script.js"></script>
 </body>
 </html>
+
