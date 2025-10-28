@@ -114,24 +114,22 @@
                     </select>
                     <select id="statusFilter" onchange="filterReservations()">
                         <option value="">모든 상태</option>
-                        <option value="confirmed">확정</option>
+                        <option value="pending">예약전</option>
+                        <option value="success">성공</option>
+                        <option value="failed">실패</option>
                         <option value="cancelled">취소</option>
-                        <option value="completed">완료</option>
-                        <option value="no_show">노쇼</option>
                     </select>
                 </div>
                 <div class="table-container">
                     <table class="data-table" id="reservationsTable">
                         <thead>
                             <tr>
-                                <th>예약번호</th>
-                                <th>회원명</th>
-                                <th>코트</th>
                                 <th>예약일</th>
+                                <th>코트</th>
+                                <th>회원명</th>
                                 <th>경기일</th>
                                 <th>시간</th>
                                 <th>참가자 수</th>
-                                <th>금액</th>
                                 <th>상태</th>
                                 <th>작업</th>
                             </tr>
@@ -156,6 +154,7 @@
                         <thead>
                             <tr>
                                 <th>볼코드</th>
+                                <th>소유자</th>
                                 <th>브랜드</th>
                                 <th>모델</th>
                                 <th>타입</th>
@@ -198,14 +197,9 @@
                             <tr>
                                 <th>볼코드</th>
                                 <th>회원명</th>
-                                <th>코트</th>
                                 <th>사용날짜</th>
-                                <th>사용시간</th>
                                 <th>가져간볼</th>
                                 <th>반납된볼</th>
-                                <th>손상된볼</th>
-                                <th>분실된볼</th>
-                                <th>사용타입</th>
                                 <th>작업</th>
                             </tr>
                         </thead>
@@ -457,6 +451,15 @@
                     <label for="specialRequests">특별 요청사항:</label>
                     <textarea id="specialRequests"></textarea>
                 </div>
+                <div class="form-group">
+                    <label for="reservationStatus">상태:</label>
+                    <select id="reservationStatus" required>
+                        <option value="pending">예약전</option>
+                        <option value="success">성공</option>
+                        <option value="failed">실패</option>
+                        <option value="cancelled">취소</option>
+                    </select>
+                </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" onclick="closeReservationModal()">취소</button>
                     <button type="submit" class="btn btn-primary">저장</button>
@@ -493,6 +496,16 @@
                         <option value="practice">연습용</option>
                         <option value="tournament">대회용</option>
                         <option value="junior">주니어</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="ballOwner">소유자:</label>
+                    <select id="ballOwner">
+                        <option value="">소유자를 선택하세요</option>
+                        <option value="거북코">거북코</option>
+                        <option value="참치">참치</option>
+                        <option value="청새치">청새치</option>
+                        <option value="클럽">클럽</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -567,28 +580,8 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="usageCourt">코트:</label>
-                    <select id="usageCourt">
-                        <option value="">코트를 선택하세요</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="usageReservation">예약:</label>
-                    <select id="usageReservation">
-                        <option value="">예약을 선택하세요</option>
-                    </select>
-                </div>
-                <div class="form-group">
                     <label for="usageDate">사용 날짜:</label>
                     <input type="date" id="usageDate" required>
-                </div>
-                <div class="form-group">
-                    <label for="usageStartTime">시작 시간:</label>
-                    <input type="time" id="usageStartTime">
-                </div>
-                <div class="form-group">
-                    <label for="usageEndTime">종료 시간:</label>
-                    <input type="time" id="usageEndTime">
                 </div>
                 <div class="form-group">
                     <label for="ballsTaken">가져간 볼 수:</label>
@@ -597,44 +590,6 @@
                 <div class="form-group">
                     <label for="ballsReturned">반납된 볼 수:</label>
                     <input type="number" id="ballsReturned" min="0" value="0">
-                </div>
-                <div class="form-group">
-                    <label for="ballsDamaged">손상된 볼 수:</label>
-                    <input type="number" id="ballsDamaged" min="0" value="0">
-                </div>
-                <div class="form-group">
-                    <label for="ballsLost">분실된 볼 수:</label>
-                    <input type="number" id="ballsLost" min="0" value="0">
-                </div>
-                <div class="form-group">
-                    <label for="usageType">사용 타입:</label>
-                    <select id="usageType">
-                        <option value="rental">대여</option>
-                        <option value="practice">연습</option>
-                        <option value="lesson">레슨</option>
-                        <option value="tournament">대회</option>
-                        <option value="maintenance">유지보수</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="conditionBefore">사용 전 상태:</label>
-                    <select id="conditionBefore">
-                        <option value="new">새것</option>
-                        <option value="good">양호</option>
-                        <option value="fair">보통</option>
-                        <option value="poor">나쁨</option>
-                        <option value="damaged">손상</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="conditionAfter">사용 후 상태:</label>
-                    <select id="conditionAfter">
-                        <option value="new">새것</option>
-                        <option value="good">양호</option>
-                        <option value="fair">보통</option>
-                        <option value="poor">나쁨</option>
-                        <option value="damaged">손상</option>
-                    </select>
                 </div>
                 <div class="form-group">
                     <label for="usageNotes">메모:</label>

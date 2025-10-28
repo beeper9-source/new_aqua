@@ -640,11 +640,42 @@ async function loadReservations() {
             aq_members!member_id(name, member_code),
             aq_courts!court_id(name, court_number)
         `)
-        .order('reservation_date', { ascending: false });
+        .order('reservation_date', { ascending: true });
     
     if (error) throw error;
-    reservations = data || [];
+    
+    // 클라이언트 사이드에서 코트번호별로 추가 정렬
+    reservations = (data || []).sort((a, b) => {
+        // 먼저 예약일로 정렬 (이미 DB에서 오름차순 정렬됨)
+        const dateA = new Date(a.reservation_date);
+        const dateB = new Date(b.reservation_date);
+        if (dateA.getTime() !== dateB.getTime()) {
+            return dateA.getTime() - dateB.getTime(); // 오름차순
+        }
+        
+        // 같은 날짜면 코트번호로 정렬 (오름차순)
+        const courtA = parseInt(a.aq_courts?.court_number || '0');
+        const courtB = parseInt(b.aq_courts?.court_number || '0');
+        
+        // 코트번호가 숫자가 아닌 경우 문자열로 비교
+        if (isNaN(courtA) || isNaN(courtB)) {
+            const courtStrA = a.aq_courts?.court_number || '';
+            const courtStrB = b.aq_courts?.court_number || '';
+            return courtStrA.localeCompare(courtStrB);
+        }
+        
+        return courtA - courtB;
+    });
+    
     return reservations;
+}
+
+// 요일 구하기 함수
+function getDayOfWeek(dateString) {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const days = ['일', '월', '화', '수', '목', '금', '토'];
+    return days[date.getDay()];
 }
 
 // 예약 테이블 렌더링
@@ -654,15 +685,40 @@ function renderReservationsTable() {
 
     reservations.forEach(reservation => {
         const row = document.createElement('tr');
+        const gameDateWithDay = reservation.game_date ? `${reservation.game_date} (${getDayOfWeek(reservation.game_date)})` : '-';
+        
+        // 예약일에 따른 배경색 클래스 추가
+        const reservationDate = new Date(reservation.reservation_date);
+        const today = new Date();
+        const diffTime = reservationDate - today;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        let dateClass = '';
+        if (diffDays < 0) {
+            dateClass = 'date-past'; // 과거
+        } else if (diffDays === 0) {
+            dateClass = 'date-today'; // 오늘
+        } else if (diffDays === 1) {
+            dateClass = 'date-tomorrow'; // 내일
+        } else if (diffDays <= 7) {
+            dateClass = 'date-week'; // 이번 주
+        } else {
+            dateClass = 'date-future'; // 미래
+        }
+        
+        row.className = dateClass;
+        
+        // 시간 형식을 간단하게 변환 (08:00 -> 8시)
+        const startTime = reservation.start_time;
+        const simpleTime = startTime ? `${parseInt(startTime.split(':')[0])}시` : '-';
+        
         row.innerHTML = `
-            <td>${reservation.reservation_code}</td>
-            <td>${reservation.aq_members?.name || '알 수 없는 회원'} (${reservation.aq_members?.member_code || '-'})</td>
-            <td>${reservation.aq_courts?.name || '알 수 없는 코트'} (${reservation.aq_courts?.court_number || '-'})</td>
             <td>${reservation.reservation_date}</td>
-            <td>${reservation.game_date || '-'}</td>
-            <td>${reservation.start_time} - ${reservation.end_time}</td>
+            <td>${reservation.aq_courts?.name || '알 수 없는 코트'} (${reservation.aq_courts?.court_number || '-'})</td>
+            <td>${reservation.aq_members?.name || '알 수 없는 회원'} (${reservation.aq_members?.member_code || '-'})</td>
+            <td>${gameDateWithDay}</td>
+            <td>${simpleTime}</td>
             <td>${reservation.guest_count}명</td>
-            <td>₩${reservation.total_amount.toLocaleString()}</td>
             <td><span class="status-badge status-${reservation.reservation_status}">${getReservationStatusText(reservation.reservation_status)}</span></td>
             <td>
                 <button class="btn btn-sm btn-warning" onclick="editReservation('${reservation.id}')">
@@ -769,6 +825,9 @@ async function openReservationModal(reservationId = null) {
         // 시간 디폴트를 8시로 설정
         document.getElementById('startTime').value = '08:00';
         
+        // 상태 디폴트를 예약전으로 설정
+        document.getElementById('reservationStatus').value = 'pending';
+        
         // 예약일 변경 이벤트 리스너 추가
         const reservationDateInput = document.getElementById('reservationDate');
         reservationDateInput.removeEventListener('change', updateGameDate);
@@ -797,6 +856,7 @@ function fillReservationForm(reservation) {
     document.getElementById('startTime').value = reservation.start_time;
     document.getElementById('guestCount').value = reservation.guest_count;
     document.getElementById('specialRequests').value = reservation.special_requests || '';
+    document.getElementById('reservationStatus').value = reservation.reservation_status || 'pending';
     
     // 예약일 변경 이벤트 리스너 추가
     const reservationDateInput = document.getElementById('reservationDate');
@@ -868,7 +928,8 @@ async function handleReservationSubmit(e) {
         end_time: endTime,
         duration_hours: 2, // 고정 2시간
         guest_count: parseInt(document.getElementById('guestCount').value),
-        special_requests: document.getElementById('specialRequests').value || null
+        special_requests: document.getElementById('specialRequests').value || null,
+        reservation_status: document.getElementById('reservationStatus').value
     };
 
     try {
@@ -1051,6 +1112,7 @@ function renderBallsTable() {
         const row = document.createElement('tr');
         row.innerHTML = `
             <td>${ball.ball_code}</td>
+            <td>${ball.owner || '-'}</td>
             <td>${ball.brand}</td>
             <td>${ball.model || '-'}</td>
             <td>${getBallTypeText(ball.ball_type)}</td>
@@ -1105,6 +1167,7 @@ function fillBallForm(ball) {
     document.getElementById('ballBrand').value = ball.brand;
     document.getElementById('ballModel').value = ball.model || '';
     document.getElementById('ballType').value = ball.ball_type;
+    document.getElementById('ballOwner').value = ball.owner || '';
     document.getElementById('ballColor').value = ball.color;
     document.getElementById('conditionStatus').value = ball.condition_status;
     document.getElementById('purchaseDate').value = ball.purchase_date || '';
@@ -1124,6 +1187,7 @@ async function handleBallSubmit(e) {
         brand: document.getElementById('ballBrand').value,
         model: document.getElementById('ballModel').value || null,
         ball_type: document.getElementById('ballType').value,
+        owner: document.getElementById('ballOwner').value || null,
         color: document.getElementById('ballColor').value,
         condition_status: document.getElementById('conditionStatus').value,
         purchase_date: document.getElementById('purchaseDate').value || null,
@@ -1131,6 +1195,8 @@ async function handleBallSubmit(e) {
         supplier: document.getElementById('supplier').value || null,
         quantity_total: parseInt(document.getElementById('quantityTotal').value),
         quantity_available: parseInt(document.getElementById('quantityTotal').value),
+        quantity_in_use: 0,
+        quantity_damaged: 0,
         storage_location: document.getElementById('storageLocation').value || null,
         notes: document.getElementById('ballNotes').value || null
     };
@@ -1139,11 +1205,16 @@ async function handleBallSubmit(e) {
         showLoading(true);
         
         if (editingId) {
-        const { error } = await supabase
-            .from('aq_tennis_balls')
-            .update(formData)
-            .eq('id', editingId);
+            // 수정 시에는 quantity_in_use와 quantity_damaged를 제외
+            const updateData = { ...formData };
+            delete updateData.quantity_in_use;
+            delete updateData.quantity_damaged;
             
+            const { error } = await supabase
+                .from('aq_tennis_balls')
+                .update(updateData)
+                .eq('id', editingId);
+                
             if (error) throw error;
             showNotification('볼 정보가 성공적으로 수정되었습니다.', 'success');
         } else {
@@ -1227,14 +1298,9 @@ function renderBallUsageTable() {
         row.innerHTML = `
             <td>${usage.ball.ball_code}</td>
             <td>${usage.member.name} (${usage.member.member_code})</td>
-            <td>${usage.court ? `${usage.court.name} (${usage.court.court_number})` : '-'}</td>
             <td>${usage.usage_date}</td>
-            <td>${usage.usage_start_time ? `${usage.usage_start_time} - ${usage.usage_end_time || ''}` : '-'}</td>
             <td>${usage.balls_taken}</td>
             <td>${usage.balls_returned}</td>
-            <td>${usage.balls_damaged}</td>
-            <td>${usage.balls_lost}</td>
-            <td>${getUsageTypeText(usage.usage_type)}</td>
             <td>
                 <button class="btn btn-sm btn-warning" onclick="editBallUsage('${usage.id}')">
                     <i class="fas fa-edit"></i> 수정
@@ -1279,18 +1345,9 @@ function closeBallUsageModal() {
 function fillBallUsageForm(usage) {
     document.getElementById('usageBall').value = usage.ball_id;
     document.getElementById('usageMember').value = usage.member_id;
-    document.getElementById('usageCourt').value = usage.court_id || '';
-    document.getElementById('usageReservation').value = usage.reservation_id || '';
     document.getElementById('usageDate').value = usage.usage_date;
-    document.getElementById('usageStartTime').value = usage.usage_start_time || '';
-    document.getElementById('usageEndTime').value = usage.usage_end_time || '';
     document.getElementById('ballsTaken').value = usage.balls_taken;
     document.getElementById('ballsReturned').value = usage.balls_returned;
-    document.getElementById('ballsDamaged').value = usage.balls_damaged;
-    document.getElementById('ballsLost').value = usage.balls_lost;
-    document.getElementById('usageType').value = usage.usage_type;
-    document.getElementById('conditionBefore').value = usage.condition_before || '';
-    document.getElementById('conditionAfter').value = usage.condition_after || '';
     document.getElementById('usageNotes').value = usage.notes || '';
 }
 
@@ -1301,18 +1358,9 @@ async function handleBallUsageSubmit(e) {
     const formData = {
         ball_id: document.getElementById('usageBall').value,
         member_id: document.getElementById('usageMember').value,
-        court_id: document.getElementById('usageCourt').value || null,
-        reservation_id: document.getElementById('usageReservation').value || null,
         usage_date: document.getElementById('usageDate').value,
-        usage_start_time: document.getElementById('usageStartTime').value || null,
-        usage_end_time: document.getElementById('usageEndTime').value || null,
         balls_taken: parseInt(document.getElementById('ballsTaken').value),
         balls_returned: parseInt(document.getElementById('ballsReturned').value),
-        balls_damaged: parseInt(document.getElementById('ballsDamaged').value),
-        balls_lost: parseInt(document.getElementById('ballsLost').value),
-        usage_type: document.getElementById('usageType').value,
-        condition_before: document.getElementById('conditionBefore').value || null,
-        condition_after: document.getElementById('conditionAfter').value || null,
         notes: document.getElementById('usageNotes').value || null
     };
 
@@ -1453,17 +1501,33 @@ function updateSelectOptions() {
         const select = document.getElementById(selectId);
         if (select) {
             select.innerHTML = '<option value="">회원을 선택하세요</option>';
-            members.forEach(member => {
-                const option = document.createElement('option');
-                option.value = member.id;
-                option.textContent = `${member.name} (${member.member_code})`;
-                select.appendChild(option);
-            });
+            
+            if (selectId === 'usageMember') {
+                // 볼 사용기록에서는 거북코, 참치, 청새치만 표시
+                const specificMembers = members.filter(member => 
+                    member.name === '거북코' || member.name === '참치' || member.name === '청새치'
+                );
+                
+                specificMembers.forEach(member => {
+                    const option = document.createElement('option');
+                    option.value = member.id;
+                    option.textContent = `${member.name} (${member.member_code})`;
+                    select.appendChild(option);
+                });
+            } else {
+                // 예약관리에서는 모든 회원 표시
+                members.forEach(member => {
+                    const option = document.createElement('option');
+                    option.value = member.id;
+                    option.textContent = `${member.name} (${member.member_code})`;
+                    select.appendChild(option);
+                });
+            }
         }
     });
 
-    // 코트 셀렉트
-    const courtSelects = ['reservationCourt', 'usageCourt', 'courtFilter'];
+    // 코트 셀렉트 (예약관리만)
+    const courtSelects = ['reservationCourt', 'courtFilter'];
     courtSelects.forEach(selectId => {
         const select = document.getElementById(selectId);
         if (select) {
@@ -1492,18 +1556,6 @@ function updateSelectOptions() {
         }
     });
 
-    // 예약 셀렉트
-    const reservationSelect = document.getElementById('usageReservation');
-    if (reservationSelect) {
-        reservationSelect.innerHTML = '<option value="">예약을 선택하세요</option>';
-        reservations.forEach(reservation => {
-            const option = document.createElement('option');
-            option.value = reservation.id;
-            const memberName = reservation.aq_members?.name || '알 수 없는 회원';
-            option.textContent = `${reservation.reservation_code} - ${memberName}`;
-            reservationSelect.appendChild(option);
-        });
-    }
 }
 
 // 텍스트 변환 함수들
@@ -1542,10 +1594,10 @@ function getSurfaceTypeText(type) {
 
 function getReservationStatusText(status) {
     const statuses = {
-        'confirmed': '확정',
+        'pending': '예약전',
+        'success': '성공',
         'cancelled': '취소',
-        'completed': '완료',
-        'no_show': '노쇼'
+        'failed': '실패'
     };
     return statuses[status] || status;
 }

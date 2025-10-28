@@ -255,9 +255,14 @@ body {
     color: #721c24;
 }
 
-.status-confirmed {
-    background: #d1ecf1;
-    color: #0c5460;
+.status-pending {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.status-success {
+    background: #d4edda;
+    color: #155724;
 }
 
 .status-cancelled {
@@ -265,19 +270,34 @@ body {
     color: #721c24;
 }
 
-.status-completed {
-    background: #d4edda;
-    color: #155724;
+.status-failed {
+    background: #f8d7da;
+    color: #721c24;
 }
 
-.status-no-show {
-    background: #fff3cd;
-    color: #856404;
+/* 예약일별 배경색 */
+.date-past {
+    background-color: #f8f9fa;
+    opacity: 0.7;
 }
 
-.status-pending {
-    background: #fff3cd;
-    color: #856404;
+.date-today {
+    background-color: #fff3cd;
+    border-left: 4px solid #ffc107;
+}
+
+.date-tomorrow {
+    background-color: #d1ecf1;
+    border-left: 4px solid #17a2b8;
+}
+
+.date-week {
+    background-color: #d4edda;
+    border-left: 4px solid #28a745;
+}
+
+.date-future {
+    background-color: #ffffff;
 }
 
 .status-paid {
