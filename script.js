@@ -762,11 +762,10 @@ function renderReservationsTable() {
         
         row.innerHTML = `
             <td>${reservation.reservation_date}</td>
-            <td>${reservation.aq_courts?.name || '알 수 없는 코트'} (${reservation.aq_courts?.court_number || '-'})</td>
-            <td>${reservation.aq_members?.name || '알 수 없는 회원'} (${reservation.aq_members?.member_code || '-'})</td>
+            <td>${reservation.aq_courts?.name || '알 수 없는 코트'}</td>
+            <td>${reservation.aq_members?.name || '알 수 없는 회원'}</td>
             <td>${gameDateWithDay}</td>
             <td>${simpleTime}</td>
-            <td>${reservation.guest_count}명</td>
             <td><span class="status-badge status-${reservation.reservation_status}">${getReservationStatusText(reservation.reservation_status)}</span></td>
             <td>
                 <button class="btn btn-sm btn-warning" onclick="editReservation('${reservation.id}')">
@@ -1115,14 +1114,39 @@ function filterReservations() {
 
     filteredReservations.forEach(reservation => {
         const row = document.createElement('tr');
+        const gameDateWithDay = reservation.game_date ? `${reservation.game_date} (${getDayOfWeek(reservation.game_date)})` : '-';
+        
+        // 예약일에 따른 배경색 클래스 추가
+        const reservationDate = new Date(reservation.reservation_date);
+        const today = new Date();
+        const diffTime = reservationDate - today;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        let dateClass = '';
+        if (diffDays < 0) {
+            dateClass = 'date-past'; // 과거
+        } else if (diffDays === 0) {
+            dateClass = 'date-today'; // 오늘
+        } else if (diffDays === 1) {
+            dateClass = 'date-tomorrow'; // 내일
+        } else if (diffDays <= 7) {
+            dateClass = 'date-week'; // 이번 주
+        } else {
+            dateClass = 'date-future'; // 미래
+        }
+        
+        row.className = dateClass;
+        
+        // 시간 형식을 간단하게 변환 (08:00 -> 8시)
+        const startTime = reservation.start_time;
+        const simpleTime = startTime ? `${parseInt(startTime.split(':')[0])}시` : '-';
+        
         row.innerHTML = `
-            <td>${reservation.reservation_code}</td>
-            <td>${reservation.member.name} (${reservation.member.member_code})</td>
-            <td>${reservation.court.name} (${reservation.court.court_number})</td>
             <td>${reservation.reservation_date}</td>
-            <td>${reservation.start_time} - ${reservation.end_time}</td>
-            <td>${reservation.guest_count}명</td>
-            <td>₩${reservation.total_amount.toLocaleString()}</td>
+            <td>${reservation.aq_courts?.name || '알 수 없는 코트'}</td>
+            <td>${reservation.aq_members?.name || '알 수 없는 회원'}</td>
+            <td>${gameDateWithDay}</td>
+            <td>${simpleTime}</td>
             <td><span class="status-badge status-${reservation.reservation_status}">${getReservationStatusText(reservation.reservation_status)}</span></td>
             <td>
                 <button class="btn btn-sm btn-warning" onclick="editReservation('${reservation.id}')">
