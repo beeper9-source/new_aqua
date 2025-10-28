@@ -300,6 +300,16 @@ body {
     background-color: #ffffff;
 }
 
+/* 헤더 버튼 그룹 */
+.header-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.header-buttons .btn {
+    margin: 0;
+}
+
 .status-paid {
     background: #d4edda;
     color: #155724;

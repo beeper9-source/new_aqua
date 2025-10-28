@@ -1,3 +1,51 @@
+// 볼코드 자동 생성: B + 3자리 일련번호 (예: B002부터 시작)
+async function generateBallCode() {
+    try {
+        // 최근 생성된 볼코드를 충분히 가져와서 순수 형식(B###)만 대상으로 계산
+        const { data, error } = await supabase
+            .from('aq_tennis_balls')
+            .select('ball_code')
+            .order('created_at', { ascending: false })
+            .limit(100);
+        if (error) throw error;
+
+        let maxSeq = 1; // B002부터 시작하므로 기본값을 1로 설정
+        (data || []).forEach(row => {
+            const code = row.ball_code || '';
+            const m = code.match(/^B(\d{3})$/);
+            if (m) {
+                const n = parseInt(m[1], 10);
+                if (!Number.isNaN(n) && n > maxSeq) maxSeq = n;
+            }
+        });
+
+        const nextNumber = maxSeq + 1;
+        const padded = String(nextNumber > 999 ? 2 : nextNumber).padStart(3, '0');
+        return `B${padded}`;
+    } catch (e) {
+        console.error('볼코드 생성 오류:', e);
+        return 'B002';
+    }
+}
+// 볼 선택 시 소유자 기반으로 회원 자동 선택
+function onUsageBallChange() {
+    const ballId = document.getElementById('usageBall').value;
+    const ball = balls.find(b => b.id === ballId);
+    if (!ball) return;
+
+    const ownerName = ball.owner;
+    if (!ownerName) return;
+
+    // usageMember 셀렉트에서 소유자와 이름이 일치하는 회원을 찾음
+    const memberSelect = document.getElementById('usageMember');
+    if (!memberSelect) return;
+
+    // members 배열에서 이름이 동일한 첫 회원 선택
+    const matchedMember = members.find(m => m.name === ownerName);
+    if (matchedMember) {
+        memberSelect.value = matchedMember.id;
+    }
+}
 // Supabase 설정
 const supabaseUrl = 'https://nqwjvrznwzmfytjlpfsk.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5xd2p2cnpud3ptZnl0amxwZnNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzNzA4NTEsImV4cCI6MjA3Mzk0Njg1MX0.R3Y2Xb9PmLr3sCLSdJov4Mgk1eAmhaCIPXEKq6u8NQI';
@@ -1115,13 +1163,9 @@ function renderBallsTable() {
             <td>${ball.owner || '-'}</td>
             <td>${ball.brand}</td>
             <td>${ball.model || '-'}</td>
-            <td>${getBallTypeText(ball.ball_type)}</td>
-            <td>${getBallColorText(ball.color)}</td>
-            <td><span class="status-badge status-${ball.condition_status}">${getConditionStatusText(ball.condition_status)}</span></td>
             <td>${ball.quantity_total}</td>
-            <td>${ball.quantity_available}</td>
             <td>${ball.quantity_in_use}</td>
-            <td>${ball.quantity_damaged}</td>
+            <td>${ball.quantity_available}</td>
             <td>
                 <button class="btn btn-sm btn-warning" onclick="editBall('${ball.id}')">
                     <i class="fas fa-edit"></i> 수정
@@ -1150,6 +1194,12 @@ function openBallModal(ballId = null) {
     } else {
         title.textContent = '새 볼 추가';
         document.getElementById('ballForm').reset();
+        // 새 볼 추가 시 볼코드 자동 채번 (B+3자리)
+        generateBallCode().then(code => {
+            document.getElementById('ballCode').value = code;
+        }).catch(() => {
+            document.getElementById('ballCode').value = '';
+        });
     }
     
     modal.style.display = 'block';
@@ -1182,8 +1232,15 @@ function fillBallForm(ball) {
 async function handleBallSubmit(e) {
     e.preventDefault();
     
+    // 볼코드가 비어있으면 최종 보정으로 자동 생성
+    let ballCodeValue = document.getElementById('ballCode').value;
+    if (!ballCodeValue) {
+        ballCodeValue = await generateBallCode();
+        document.getElementById('ballCode').value = ballCodeValue;
+    }
+
     const formData = {
-        ball_code: document.getElementById('ballCode').value,
+        ball_code: ballCodeValue,
         brand: document.getElementById('ballBrand').value,
         model: document.getElementById('ballModel').value || null,
         ball_type: document.getElementById('ballType').value,
@@ -1300,7 +1357,6 @@ function renderBallUsageTable() {
             <td>${usage.member.name} (${usage.member.member_code})</td>
             <td>${usage.usage_date}</td>
             <td>${usage.balls_taken}</td>
-            <td>${usage.balls_returned}</td>
             <td>
                 <button class="btn btn-sm btn-warning" onclick="editBallUsage('${usage.id}')">
                     <i class="fas fa-edit"></i> 수정
@@ -1347,7 +1403,6 @@ function fillBallUsageForm(usage) {
     document.getElementById('usageMember').value = usage.member_id;
     document.getElementById('usageDate').value = usage.usage_date;
     document.getElementById('ballsTaken').value = usage.balls_taken;
-    document.getElementById('ballsReturned').value = usage.balls_returned;
     document.getElementById('usageNotes').value = usage.notes || '';
 }
 
@@ -1360,7 +1415,6 @@ async function handleBallUsageSubmit(e) {
         member_id: document.getElementById('usageMember').value,
         usage_date: document.getElementById('usageDate').value,
         balls_taken: parseInt(document.getElementById('ballsTaken').value),
-        balls_returned: parseInt(document.getElementById('ballsReturned').value),
         notes: document.getElementById('usageNotes').value || null
     };
 
@@ -1550,7 +1604,7 @@ function updateSelectOptions() {
             balls.forEach(ball => {
                 const option = document.createElement('option');
                 option.value = ball.id;
-                option.textContent = `${ball.ball_code} - ${ball.brand} ${ball.model || ''}`;
+                option.textContent = `${ball.ball_code} - ${ball.brand} ${ball.model || ''} (${ball.owner || '-'})`;
                 select.appendChild(option);
             });
         }
@@ -1676,6 +1730,135 @@ async function refreshData() {
     } catch (error) {
         console.error('데이터 새로고침 오류:', error);
         showNotification('데이터 새로고침 중 오류가 발생했습니다.', 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
+// ==================== 볼나누기 관리 ====================
+
+// 볼나누기 모달 열기
+function openBallSplitModal() {
+    const modal = document.getElementById('ballSplitModal');
+    const ballSelect = document.getElementById('splitBall');
+    
+    // 볼 선택 옵션 업데이트
+    ballSelect.innerHTML = '<option value="">볼을 선택하세요</option>';
+    balls.forEach(ball => {
+        if (ball.quantity_available > 0) { // 사용 가능한 볼만 표시
+            const option = document.createElement('option');
+            option.value = ball.id;
+            option.textContent = `${ball.ball_code} - ${ball.brand} ${ball.model || ''} (${ball.owner}, ${ball.quantity_available}개)`;
+            ballSelect.appendChild(option);
+        }
+    });
+    
+    // 폼 초기화
+    document.getElementById('ballSplitForm').reset();
+    document.getElementById('splitFromOwner').value = '';
+    document.getElementById('maxSplitQuantity').textContent = '0';
+    
+    modal.style.display = 'block';
+}
+
+// 볼나누기 모달 닫기
+function closeBallSplitModal() {
+    document.getElementById('ballSplitModal').style.display = 'none';
+}
+
+// 볼 선택 시 정보 업데이트
+function updateSplitBallInfo() {
+    const ballId = document.getElementById('splitBall').value;
+    const ball = balls.find(b => b.id === ballId);
+    
+    if (ball) {
+        document.getElementById('splitFromOwner').value = ball.owner || '미지정';
+        document.getElementById('splitQuantity').max = ball.quantity_available;
+        document.getElementById('maxSplitQuantity').textContent = ball.quantity_available;
+        document.getElementById('splitQuantity').value = '';
+    } else {
+        document.getElementById('splitFromOwner').value = '';
+        document.getElementById('maxSplitQuantity').textContent = '0';
+        document.getElementById('splitQuantity').value = '';
+    }
+}
+
+// 볼나누기 폼 제출 처리
+async function handleBallSplitSubmit(e) {
+    e.preventDefault();
+    
+    const ballId = document.getElementById('splitBall').value;
+    const toOwner = document.getElementById('splitToOwner').value;
+    const splitQuantity = parseInt(document.getElementById('splitQuantity').value);
+    const notes = document.getElementById('splitNotes').value;
+    
+    const ball = balls.find(b => b.id === ballId);
+    if (!ball) {
+        showNotification('볼을 찾을 수 없습니다.', 'error');
+        return;
+    }
+    
+    if (splitQuantity > ball.quantity_available) {
+        showNotification('나눌 수량이 사용 가능한 수량을 초과합니다.', 'error');
+        return;
+    }
+    
+    if (ball.owner === toOwner) {
+        showNotification('같은 소유자에게는 볼을 나눌 수 없습니다.', 'error');
+        return;
+    }
+    
+    try {
+        showLoading(true);
+        
+        // 기존 볼의 수량 감소
+        const { error: updateError } = await supabase
+            .from('aq_tennis_balls')
+            .update({
+                quantity_available: ball.quantity_available - splitQuantity,
+                quantity_total: ball.quantity_total - splitQuantity
+            })
+            .eq('id', ballId);
+        
+        if (updateError) throw updateError;
+        
+        // 새로운 볼 생성 (받는 소유자용)
+        const timestamp = Date.now().toString().slice(-6); // 마지막 6자리만 사용
+        const newBallCode = `${ball.ball_code.slice(0, 8)}-${toOwner.slice(0, 2)}-${timestamp}`;
+        const { error: insertError } = await supabase
+            .from('aq_tennis_balls')
+            .insert([{
+                ball_code: newBallCode,
+                brand: ball.brand,
+                model: ball.model,
+                ball_type: ball.ball_type,
+                owner: toOwner,
+                color: ball.color,
+                condition_status: ball.condition_status,
+                purchase_date: ball.purchase_date,
+                purchase_price: ball.purchase_price,
+                supplier: ball.supplier,
+                batch_number: ball.batch_number,
+                quantity_total: splitQuantity,
+                quantity_available: splitQuantity,
+                quantity_in_use: 0,
+                quantity_damaged: 0,
+                storage_location: ball.storage_location,
+                notes: notes || `볼나누기: ${ball.owner} → ${toOwner}`,
+                is_active: true
+            }]);
+        
+        if (insertError) throw insertError;
+        
+        showNotification(`${splitQuantity}개의 볼을 ${toOwner}에게 성공적으로 나눠주었습니다.`, 'success');
+        
+        await loadAllData();
+        renderBallsTable();
+        closeBallSplitModal();
+        
+    } catch (error) {
+        console.error('볼나누기 오류:', error);
+        showNotification('볼나누기 중 오류가 발생했습니다.', 'error');
     } finally {
         showLoading(false);
     }

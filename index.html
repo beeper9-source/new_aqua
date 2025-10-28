@@ -145,9 +145,14 @@
             <section id="balls" class="tab-content">
                 <div class="section-header">
                     <h2>테니스볼 관리</h2>
-                    <button class="btn btn-primary" onclick="openBallModal()">
-                        <i class="fas fa-plus"></i> 새 볼 추가
-                    </button>
+                    <div class="header-buttons">
+                        <button class="btn btn-primary" onclick="openBallModal()">
+                            <i class="fas fa-plus"></i> 새 볼 추가
+                        </button>
+                        <button class="btn btn-success" onclick="openBallSplitModal()">
+                            <i class="fas fa-share-alt"></i> 볼나누기
+                        </button>
+                    </div>
                 </div>
                 <div class="table-container">
                     <table class="data-table" id="ballsTable">
@@ -157,13 +162,9 @@
                                 <th>소유자</th>
                                 <th>브랜드</th>
                                 <th>모델</th>
-                                <th>타입</th>
-                                <th>색상</th>
-                                <th>상태</th>
                                 <th>총수량</th>
-                                <th>사용가능</th>
-                                <th>사용중</th>
-                                <th>손상</th>
+                                <th>사용완료</th>
+                                <th>재고</th>
                                 <th>작업</th>
                             </tr>
                         </thead>
@@ -198,8 +199,7 @@
                                 <th>볼코드</th>
                                 <th>회원명</th>
                                 <th>사용날짜</th>
-                                <th>가져간볼</th>
-                                <th>반납된볼</th>
+                                <th>사용한 볼 수</th>
                                 <th>작업</th>
                             </tr>
                         </thead>
@@ -478,7 +478,7 @@
             <form id="ballForm">
                 <div class="form-group">
                     <label for="ballCode">볼코드:</label>
-                    <input type="text" id="ballCode" required>
+                    <input type="text" id="ballCode" required readonly>
                 </div>
                 <div class="form-group">
                     <label for="ballBrand">브랜드:</label>
@@ -569,11 +569,11 @@
             <form id="ballUsageForm">
                 <div class="form-group">
                     <label for="usageBall">볼:</label>
-                    <select id="usageBall" required>
+                    <select id="usageBall" required onchange="onUsageBallChange()">
                         <option value="">볼을 선택하세요</option>
                     </select>
                 </div>
-                <div class="form-group">
+                <div class="form-group" style="display: none;">
                     <label for="usageMember">회원:</label>
                     <select id="usageMember" required>
                         <option value="">회원을 선택하세요</option>
@@ -584,12 +584,8 @@
                     <input type="date" id="usageDate" required>
                 </div>
                 <div class="form-group">
-                    <label for="ballsTaken">가져간 볼 수:</label>
+                    <label for="ballsTaken">사용한 볼 수:</label>
                     <input type="number" id="ballsTaken" min="1" required>
-                </div>
-                <div class="form-group">
-                    <label for="ballsReturned">반납된 볼 수:</label>
-                    <input type="number" id="ballsReturned" min="0" value="0">
                 </div>
                 <div class="form-group">
                     <label for="usageNotes">메모:</label>
@@ -598,6 +594,51 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" onclick="closeBallUsageModal()">취소</button>
                     <button type="submit" class="btn btn-primary">저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 볼나누기 모달 -->
+    <div id="ballSplitModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>볼나누기</h3>
+                <span class="close" onclick="closeBallSplitModal()">&times;</span>
+            </div>
+            <form id="ballSplitForm" onsubmit="handleBallSplitSubmit(event)">
+                <div class="form-group">
+                    <label for="splitBall">나눌 볼:</label>
+                    <select id="splitBall" required onchange="updateSplitBallInfo()">
+                        <option value="">볼을 선택하세요</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="splitFromOwner">현재 소유자:</label>
+                    <input type="text" id="splitFromOwner" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="splitToOwner">받을 소유자:</label>
+                    <select id="splitToOwner" required>
+                        <option value="">소유자를 선택하세요</option>
+                        <option value="거북코">거북코</option>
+                        <option value="참치">참치</option>
+                        <option value="청새치">청새치</option>
+                        <option value="클럽">클럽</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="splitQuantity">나눌 수량:</label>
+                    <input type="number" id="splitQuantity" min="1" required>
+                    <small class="form-text">최대 나눌 수량: <span id="maxSplitQuantity">0</span>개</small>
+                </div>
+                <div class="form-group">
+                    <label for="splitNotes">메모:</label>
+                    <textarea id="splitNotes" placeholder="볼나누기 사유나 메모를 입력하세요"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeBallSplitModal()">취소</button>
+                    <button type="submit" class="btn btn-success">볼나누기</button>
                 </div>
             </form>
         </div>
