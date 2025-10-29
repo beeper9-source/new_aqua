@@ -29,15 +29,46 @@ body {
     z-index: 100;
 }
 
+.header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
 .header-content h1 {
     font-size: 2rem;
-    margin-bottom: 1rem;
     text-align: center;
+    flex: 1;
+    margin: 0;
 }
 
 .header-content h1 i {
     margin-right: 0.5rem;
     color: #ffd700;
+}
+
+.version-info {
+    display: flex;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.version-label {
+    font-size: 0.8rem;
+    font-weight: 300;
+    margin-right: 0.25rem;
+    opacity: 0.8;
+}
+
+.version-number {
+    font-size: 1rem;
+    font-weight: 600;
+    font-family: 'Courier New', monospace;
 }
 
 /* 네비게이션 탭 */
@@ -418,6 +449,33 @@ form {
     min-height: 80px;
 }
 
+.form-text {
+    font-size: 0.8rem;
+    color: #6c757d;
+    margin-top: 0.25rem;
+    display: block;
+}
+
+.readonly-input {
+    background-color: #f8f9fa;
+    color: #6c757d;
+    cursor: not-allowed;
+}
+
+.quantity-input, .notes-input {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 0.9rem;
+    transition: border-color 0.3s ease;
+}
+
+.quantity-input:focus, .notes-input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+}
+
 .modal-footer {
     padding: 1.5rem 2rem;
     border-top: 1px solid #e1e8ed;
@@ -505,9 +563,24 @@ form {
         padding: 0.5rem 0;
     }
     
+    .header-top {
+        flex-direction: column;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    
     .header-content h1 {
         font-size: 1.5rem;
-        margin-bottom: 0.5rem;
+        margin: 0;
+    }
+    
+    .version-info {
+        padding: 0.3rem 0.8rem;
+        font-size: 0.8rem;
+    }
+    
+    .version-number {
+        font-size: 0.9rem;
     }
     
     .nav-tabs {

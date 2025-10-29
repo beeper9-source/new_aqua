@@ -1,51 +1,3 @@
-// 볼코드 자동 생성: B + 3자리 일련번호 (예: B002부터 시작)
-async function generateBallCode() {
-    try {
-        // 최근 생성된 볼코드를 충분히 가져와서 순수 형식(B###)만 대상으로 계산
-        const { data, error } = await supabase
-            .from('aq_tennis_balls')
-            .select('ball_code')
-            .order('created_at', { ascending: false })
-            .limit(100);
-        if (error) throw error;
-
-        let maxSeq = 1; // B002부터 시작하므로 기본값을 1로 설정
-        (data || []).forEach(row => {
-            const code = row.ball_code || '';
-            const m = code.match(/^B(\d{3})$/);
-            if (m) {
-                const n = parseInt(m[1], 10);
-                if (!Number.isNaN(n) && n > maxSeq) maxSeq = n;
-            }
-        });
-
-        const nextNumber = maxSeq + 1;
-        const padded = String(nextNumber > 999 ? 2 : nextNumber).padStart(3, '0');
-        return `B${padded}`;
-    } catch (e) {
-        console.error('볼코드 생성 오류:', e);
-        return 'B002';
-    }
-}
-// 볼 선택 시 소유자 기반으로 회원 자동 선택
-function onUsageBallChange() {
-    const ballId = document.getElementById('usageBall').value;
-    const ball = balls.find(b => b.id === ballId);
-    if (!ball) return;
-
-    const ownerName = ball.owner;
-    if (!ownerName) return;
-
-    // usageMember 셀렉트에서 소유자와 이름이 일치하는 회원을 찾음
-    const memberSelect = document.getElementById('usageMember');
-    if (!memberSelect) return;
-
-    // members 배열에서 이름이 동일한 첫 회원 선택
-    const matchedMember = members.find(m => m.name === ownerName);
-    if (matchedMember) {
-        memberSelect.value = matchedMember.id;
-    }
-}
 // Supabase 설정
 const supabaseUrl = 'https://nqwjvrznwzmfytjlpfsk.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5xd2p2cnpud3ptZnl0amxwZnNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzNzA4NTEsImV4cCI6MjA3Mzk0Njg1MX0.R3Y2Xb9PmLr3sCLSdJov4Mgk1eAmhaCIPXEKq6u8NQI';
@@ -57,8 +9,175 @@ let editingId = null;
 let members = [];
 let courts = [];
 let reservations = [];
-let balls = [];
-let ballUsage = [];
+let ballInventory = [];
+let ballUsageRecords = [];
+
+// 버전 관리
+const VERSION_KEY = 'aqua_tennis_version';
+
+// 버전 초기화 및 업데이트
+async function initializeVersion() {
+    try {
+        // 현재 활성 버전 조회
+        const { data: currentVersionData, error: fetchError } = await supabase
+            .from('aq_version_management')
+            .select('version_number')
+            .eq('is_active', true)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+        
+        if (fetchError && fetchError.code !== 'PGRST116') {
+            throw fetchError;
+        }
+        
+        let currentVersion;
+        
+        if (currentVersionData) {
+            // 기존 버전이 있으면 패치 버전 증가
+            const versionParts = currentVersionData.version_number.split('.');
+            const major = parseInt(versionParts[0]);
+            const minor = parseInt(versionParts[1]);
+            const patch = parseInt(versionParts[2]) + 1; // 패치 버전 증가
+            
+            currentVersion = `${major}.${minor}.${patch}`;
+            
+            // 새 버전을 데이터베이스에 저장
+            const { error: insertError } = await supabase
+                .from('aq_version_management')
+                .insert([{
+                    version_number: currentVersion,
+                    release_notes: `Auto-increment patch version ${patch}`,
+                    created_by: 'system'
+                }]);
+            
+            if (insertError) {
+                console.error('버전 저장 오류:', insertError);
+                // 오류 시 기존 버전 사용
+                currentVersion = currentVersionData.version_number;
+            }
+        } else {
+            // 첫 실행 시 초기 버전 설정
+            currentVersion = '1.0.0';
+            
+            const { error: insertError } = await supabase
+                .from('aq_version_management')
+                .insert([{
+                    version_number: currentVersion,
+                    release_notes: 'Initial release',
+                    created_by: 'system'
+                }]);
+            
+            if (insertError) {
+                console.error('초기 버전 저장 오류:', insertError);
+            }
+        }
+        
+        // 로컬 스토리지에도 저장 (오프라인 대비)
+        localStorage.setItem(VERSION_KEY, currentVersion);
+        
+        // 버전 표시 업데이트
+        const versionElement = document.getElementById('versionNumber');
+        if (versionElement) {
+            versionElement.textContent = currentVersion;
+        }
+        
+        console.log(`Aqua Tennis Club v${currentVersion}`);
+        return currentVersion;
+        
+    } catch (error) {
+        console.error('버전 초기화 오류:', error);
+        
+        // 오류 시 로컬 스토리지에서 버전 가져오기
+        let fallbackVersion = localStorage.getItem(VERSION_KEY);
+        if (!fallbackVersion) {
+            fallbackVersion = '1.0.0';
+            localStorage.setItem(VERSION_KEY, fallbackVersion);
+        }
+        
+        const versionElement = document.getElementById('versionNumber');
+        if (versionElement) {
+            versionElement.textContent = fallbackVersion;
+        }
+        
+        return fallbackVersion;
+    }
+}
+
+// 버전 히스토리 조회
+async function getVersionHistory() {
+    try {
+        const { data, error } = await supabase
+            .from('aq_version_management')
+            .select('*')
+            .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        console.error('버전 히스토리 조회 오류:', error);
+        return [];
+    }
+}
+
+// 특정 버전으로 롤백
+async function rollbackToVersion(versionNumber) {
+    try {
+        // 모든 버전을 비활성화
+        const { error: deactivateError } = await supabase
+            .from('aq_version_management')
+            .update({ is_active: false })
+            .neq('version_number', versionNumber);
+        
+        if (deactivateError) throw deactivateError;
+        
+        // 선택된 버전을 활성화
+        const { error: activateError } = await supabase
+            .from('aq_version_management')
+            .update({ is_active: true })
+            .eq('version_number', versionNumber);
+        
+        if (activateError) throw activateError;
+        
+        // 로컬 스토리지 업데이트
+        localStorage.setItem(VERSION_KEY, versionNumber);
+        
+        // UI 업데이트
+        const versionElement = document.getElementById('versionNumber');
+        if (versionElement) {
+            versionElement.textContent = versionNumber;
+        }
+        
+        showNotification(`버전 ${versionNumber}으로 롤백되었습니다.`, 'success');
+        return true;
+    } catch (error) {
+        console.error('버전 롤백 오류:', error);
+        showNotification('버전 롤백 중 오류가 발생했습니다.', 'error');
+        return false;
+    }
+}
+
+// 수동 버전 생성
+async function createNewVersion(versionNumber, releaseNotes = '') {
+    try {
+        const { error } = await supabase
+            .from('aq_version_management')
+            .insert([{
+                version_number: versionNumber,
+                release_notes: releaseNotes || `Manual version creation: ${versionNumber}`,
+                created_by: 'manual'
+            }]);
+        
+        if (error) throw error;
+        
+        showNotification(`새 버전 ${versionNumber}이 생성되었습니다.`, 'success');
+        return true;
+    } catch (error) {
+        console.error('버전 생성 오류:', error);
+        showNotification('버전 생성 중 오류가 발생했습니다.', 'error');
+        return false;
+    }
+}
 
 // 페이지 로드 시 초기화
 document.addEventListener('DOMContentLoaded', function() {
@@ -69,13 +188,16 @@ document.addEventListener('DOMContentLoaded', function() {
 async function initializeApp() {
     showLoading(true);
     try {
+        // 버전 초기화
+        const currentVersion = await initializeVersion();
+        
         await loadAllData();
         setupEventListeners();
         
         // 예약관리 탭을 기본으로 활성화하고 데이터 렌더링
         await switchTab('reservations');
         
-        showNotification('앱이 성공적으로 로드되었습니다.', 'success');
+        showNotification(`앱이 성공적으로 로드되었습니다. (v${currentVersion})`, 'success');
     } catch (error) {
         console.error('앱 초기화 오류:', error);
         showNotification('앱 로드 중 오류가 발생했습니다.', 'error');
@@ -91,8 +213,8 @@ async function loadAllData() {
             loadMembers(),
             loadCourts(),
             loadReservations(),
-            loadBalls(),
-            loadBallUsage()
+            loadBallInventory(),
+            loadBallUsageRecords()
         ]);
         
         updateSelectOptions();
@@ -116,7 +238,7 @@ function setupEventListeners() {
     document.getElementById('memberForm').addEventListener('submit', handleMemberSubmit);
     document.getElementById('courtForm').addEventListener('submit', handleCourtSubmit);
     document.getElementById('reservationForm').addEventListener('submit', handleReservationSubmit);
-    document.getElementById('ballForm').addEventListener('submit', handleBallSubmit);
+    document.getElementById('ballInventoryForm').addEventListener('submit', handleBallInventorySubmit);
     document.getElementById('ballUsageForm').addEventListener('submit', handleBallUsageSubmit);
 
     // 모달 외부 클릭 시 닫기
@@ -170,11 +292,11 @@ async function switchTab(tabName) {
                 renderReservationsTable();
                 break;
             case 'balls':
-                await loadBalls();
-                renderBallsTable();
+                await loadBallInventory();
+                renderBallInventoryTable();
                 break;
             case 'ball-usage':
-                await loadBallUsage();
+                await loadBallUsageRecords();
                 renderBallUsageTable();
                 break;
         }
@@ -1161,40 +1283,56 @@ function filterReservations() {
     });
 }
 
-// ==================== 볼 관리 ====================
+// ==================== 볼 재고 관리 ====================
 
-// 볼 데이터 로드
-async function loadBalls() {
+// 볼 재고 데이터 로드
+async function loadBallInventory() {
     const { data, error } = await supabase
-        .from('aq_tennis_balls')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .from('aq_ball_inventory')
+        .select(`
+            *,
+            aq_members!member_id(name, member_code)
+        `)
+        .eq('is_active', true)
+        .order('aq_members(name)', { ascending: true });
     
     if (error) throw error;
-    balls = data || [];
-    return balls;
+    ballInventory = data || [];
+    return ballInventory;
 }
 
-// 볼 테이블 렌더링
-function renderBallsTable() {
-    const tbody = document.getElementById('ballsTableBody');
+// 볼 재고 테이블 렌더링
+function renderBallInventoryTable() {
+    const tbody = document.getElementById('ballInventoryTableBody');
     tbody.innerHTML = '';
 
-    balls.forEach(ball => {
+    ballInventory.forEach(inventory => {
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td>${ball.ball_code}</td>
-            <td>${ball.owner || '-'}</td>
-            <td>${ball.brand}</td>
-            <td>${ball.model || '-'}</td>
-            <td>${ball.quantity_total}</td>
-            <td>${ball.quantity_in_use}</td>
-            <td>${ball.quantity_available}</td>
+            <td>${inventory.aq_members?.name || '알 수 없는 회원'}</td>
             <td>
-                <button class="btn btn-sm btn-warning" onclick="editBall('${ball.id}')">
-                    <i class="fas fa-edit"></i> 수정
-                </button>
-                <button class="btn btn-sm btn-danger" onclick="deleteBall('${ball.id}')">
+                <input type="number" 
+                       class="quantity-input" 
+                       value="${inventory.total_quantity}" 
+                       min="0" 
+                       data-inventory-id="${inventory.id}"
+                       data-member-id="${inventory.member_id}"
+                       onchange="updateTotalQuantity('${inventory.id}', this.value)"
+                       style="width: 80px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;">
+            </td>
+            <td>${inventory.used_quantity}개</td>
+            <td>${inventory.available_quantity}개</td>
+            <td>
+                <input type="text" 
+                       class="notes-input" 
+                       value="${inventory.notes || ''}" 
+                       placeholder="메모 입력"
+                       data-inventory-id="${inventory.id}"
+                       onchange="updateInventoryNotes('${inventory.id}', this.value)"
+                       style="width: 120px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;">
+            </td>
+            <td>
+                <button class="btn btn-sm btn-danger" onclick="deleteBallInventory('${inventory.id}')">
                     <i class="fas fa-trash"></i> 삭제
                 </button>
             </td>
@@ -1203,148 +1341,208 @@ function renderBallsTable() {
     });
 }
 
-// 볼 모달 열기
-function openBallModal(ballId = null) {
-    editingId = ballId;
-    const modal = document.getElementById('ballModal');
-    const title = document.getElementById('ballModalTitle');
+// 볼 재고 모달 열기
+function openBallInventoryModal(inventoryId = null) {
+    editingId = inventoryId;
+    const modal = document.getElementById('ballInventoryModal');
+    const title = document.getElementById('ballInventoryModalTitle');
+    const memberSelectGroup = document.getElementById('inventoryMember').parentElement;
+    const memberDisplayGroup = document.getElementById('memberDisplayGroup');
     
-    if (ballId) {
-        title.textContent = '볼 수정';
-        const ball = balls.find(b => b.id === ballId);
-        if (ball) {
-            fillBallForm(ball);
+    if (inventoryId) {
+        title.textContent = '볼 재고 수정';
+        const inventory = ballInventory.find(i => i.id === inventoryId);
+        if (inventory) {
+            // 수정 시에는 회원 선택을 숨기고 읽기 전용으로 표시
+            memberSelectGroup.style.display = 'none';
+            memberDisplayGroup.style.display = 'block';
+            
+            // 회원명 표시
+            document.getElementById('memberDisplay').value = inventory.aq_members?.name || '알 수 없는 회원';
+            document.getElementById('inventoryMemberId').value = inventory.member_id;
+            
+            fillBallInventoryForm(inventory);
         }
     } else {
-        title.textContent = '새 볼 추가';
-        document.getElementById('ballForm').reset();
-        // 새 볼 추가 시 볼코드 자동 채번 (B+3자리)
-        generateBallCode().then(code => {
-            document.getElementById('ballCode').value = code;
-        }).catch(() => {
-            document.getElementById('ballCode').value = '';
-        });
+        title.textContent = '볼 재고 추가';
+        // 새로 추가 시에는 회원 선택을 보여줌
+        memberSelectGroup.style.display = 'block';
+        memberDisplayGroup.style.display = 'none';
+        
+        // 회원 셀렉트 옵션 업데이트
+        updateSelectOptions();
+        document.getElementById('ballInventoryForm').reset();
     }
     
     modal.style.display = 'block';
 }
 
-// 볼 모달 닫기
-function closeBallModal() {
-    document.getElementById('ballModal').style.display = 'none';
+// 볼 재고 모달 닫기
+function closeBallInventoryModal() {
+    document.getElementById('ballInventoryModal').style.display = 'none';
     editingId = null;
 }
 
-// 볼 폼 채우기
-function fillBallForm(ball) {
-    document.getElementById('ballCode').value = ball.ball_code;
-    document.getElementById('ballBrand').value = ball.brand;
-    document.getElementById('ballModel').value = ball.model || '';
-    document.getElementById('ballType').value = ball.ball_type;
-    document.getElementById('ballOwner').value = ball.owner || '';
-    document.getElementById('ballColor').value = ball.color;
-    document.getElementById('conditionStatus').value = ball.condition_status;
-    document.getElementById('purchaseDate').value = ball.purchase_date || '';
-    document.getElementById('purchasePrice').value = ball.purchase_price || '';
-    document.getElementById('supplier').value = ball.supplier || '';
-    document.getElementById('quantityTotal').value = ball.quantity_total;
-    document.getElementById('storageLocation').value = ball.storage_location || '';
-    document.getElementById('ballNotes').value = ball.notes || '';
+// 볼 재고 폼 채우기
+function fillBallInventoryForm(inventory) {
+    // 회원 셀렉트 옵션을 먼저 업데이트
+    updateSelectOptions();
+    
+    // 폼 데이터 채우기
+    document.getElementById('inventoryMember').value = inventory.member_id;
+    document.getElementById('totalQuantity').value = inventory.total_quantity;
+    document.getElementById('usedQuantity').value = inventory.used_quantity;
+    document.getElementById('inventoryNotes').value = inventory.notes || '';
 }
 
-// 볼 폼 제출 처리
-async function handleBallSubmit(e) {
+// 볼 재고 폼 제출 처리
+async function handleBallInventorySubmit(e) {
     e.preventDefault();
     
-    // 볼코드가 비어있으면 최종 보정으로 자동 생성
-    let ballCodeValue = document.getElementById('ballCode').value;
-    if (!ballCodeValue) {
-        ballCodeValue = await generateBallCode();
-        document.getElementById('ballCode').value = ballCodeValue;
-    }
-
+    // 수정 시에는 숨겨진 회원 ID를 사용, 새로 추가 시에는 셀렉트 값을 사용
+    const memberId = editingId ? 
+        document.getElementById('inventoryMemberId').value : 
+        document.getElementById('inventoryMember').value;
+    
     const formData = {
-        ball_code: ballCodeValue,
-        brand: document.getElementById('ballBrand').value,
-        model: document.getElementById('ballModel').value || null,
-        ball_type: document.getElementById('ballType').value,
-        owner: document.getElementById('ballOwner').value || null,
-        color: document.getElementById('ballColor').value,
-        condition_status: document.getElementById('conditionStatus').value,
-        purchase_date: document.getElementById('purchaseDate').value || null,
-        purchase_price: document.getElementById('purchasePrice').value ? parseFloat(document.getElementById('purchasePrice').value) : null,
-        supplier: document.getElementById('supplier').value || null,
-        quantity_total: parseInt(document.getElementById('quantityTotal').value),
-        quantity_available: parseInt(document.getElementById('quantityTotal').value),
-        quantity_in_use: 0,
-        quantity_damaged: 0,
-        storage_location: document.getElementById('storageLocation').value || null,
-        notes: document.getElementById('ballNotes').value || null
+        member_id: memberId,
+        total_quantity: parseInt(document.getElementById('totalQuantity').value),
+        used_quantity: parseInt(document.getElementById('usedQuantity').value),
+        notes: document.getElementById('inventoryNotes').value || null
     };
 
     try {
         showLoading(true);
         
         if (editingId) {
-            // 수정 시에는 quantity_in_use와 quantity_damaged를 제외
-            const updateData = { ...formData };
-            delete updateData.quantity_in_use;
-            delete updateData.quantity_damaged;
-            
             const { error } = await supabase
-                .from('aq_tennis_balls')
-                .update(updateData)
+                .from('aq_ball_inventory')
+                .update(formData)
                 .eq('id', editingId);
                 
             if (error) throw error;
-            showNotification('볼 정보가 성공적으로 수정되었습니다.', 'success');
+            showNotification('볼 재고 정보가 성공적으로 수정되었습니다.', 'success');
         } else {
-            const { error } = await supabase
-                .from('aq_tennis_balls')
-                .insert([formData]);
+            // 새 재고 추가 시 해당 회원의 기존 재고가 있는지 확인
+            const { data: existingInventory, error: checkError } = await supabase
+                .from('aq_ball_inventory')
+                .select('id')
+                .eq('member_id', formData.member_id)
+                .eq('is_active', true)
+                .single();
             
-            if (error) throw error;
-            showNotification('새 볼이 성공적으로 추가되었습니다.', 'success');
+            if (checkError && checkError.code !== 'PGRST116') {
+                throw checkError;
+            }
+            
+            if (existingInventory) {
+                // 기존 재고가 있으면 업데이트
+                const { error: updateError } = await supabase
+                    .from('aq_ball_inventory')
+                    .update(formData)
+                    .eq('id', existingInventory.id);
+                
+                if (updateError) throw updateError;
+                showNotification('볼 재고 정보가 성공적으로 업데이트되었습니다.', 'success');
+            } else {
+                // 새 재고 생성
+                const { error: insertError } = await supabase
+                    .from('aq_ball_inventory')
+                    .insert([formData]);
+                
+                if (insertError) throw insertError;
+                showNotification('새 볼 재고가 성공적으로 추가되었습니다.', 'success');
+            }
         }
         
         await loadAllData();
-        renderBallsTable();
-        closeBallModal();
+        renderBallInventoryTable();
+        closeBallInventoryModal();
         
     } catch (error) {
-        console.error('볼 저장 오류:', error);
-        showNotification('볼 저장 중 오류가 발생했습니다.', 'error');
+        console.error('볼 재고 저장 오류:', error);
+        showNotification('볼 재고 저장 중 오류가 발생했습니다.', 'error');
     } finally {
         showLoading(false);
     }
 }
 
-// 볼 수정
-function editBall(ballId) {
-    openBallModal(ballId);
+// 볼 재고 수정
+function editBallInventory(inventoryId) {
+    openBallInventoryModal(inventoryId);
 }
 
-// 볼 삭제
-async function deleteBall(ballId) {
-    if (!confirm('정말로 이 볼을 삭제하시겠습니까?')) return;
+// 총 갯수 업데이트
+async function updateTotalQuantity(inventoryId, newQuantity) {
+    try {
+        const quantity = parseInt(newQuantity);
+        if (isNaN(quantity) || quantity < 0) {
+            showNotification('올바른 갯수를 입력해주세요.', 'error');
+            return;
+        }
+
+        const { error } = await supabase
+            .from('aq_ball_inventory')
+            .update({ total_quantity: quantity })
+            .eq('id', inventoryId);
+        
+        if (error) throw error;
+        
+        showNotification('총 갯수가 업데이트되었습니다.', 'success');
+        
+        // 데이터 새로고침 후 테이블 다시 렌더링
+        await loadBallInventory();
+        renderBallInventoryTable();
+        
+    } catch (error) {
+        console.error('총 갯수 업데이트 오류:', error);
+        showNotification('총 갯수 업데이트 중 오류가 발생했습니다.', 'error');
+    }
+}
+
+// 메모 업데이트
+async function updateInventoryNotes(inventoryId, newNotes) {
+    try {
+        const { error } = await supabase
+            .from('aq_ball_inventory')
+            .update({ notes: newNotes || null })
+            .eq('id', inventoryId);
+        
+        if (error) throw error;
+        
+        showNotification('메모가 업데이트되었습니다.', 'success');
+        
+        // 데이터 새로고침 후 테이블 다시 렌더링
+        await loadBallInventory();
+        renderBallInventoryTable();
+        
+    } catch (error) {
+        console.error('메모 업데이트 오류:', error);
+        showNotification('메모 업데이트 중 오류가 발생했습니다.', 'error');
+    }
+}
+
+// 볼 재고 삭제
+async function deleteBallInventory(inventoryId) {
+    if (!confirm('정말로 이 볼 재고를 삭제하시겠습니까?')) return;
     
     try {
         showLoading(true);
         
         const { error } = await supabase
-            .from('aq_tennis_balls')
-            .delete()
-            .eq('id', ballId);
+            .from('aq_ball_inventory')
+            .update({ is_active: false })
+            .eq('id', inventoryId);
         
         if (error) throw error;
         
-        showNotification('볼이 성공적으로 삭제되었습니다.', 'success');
+        showNotification('볼 재고가 성공적으로 삭제되었습니다.', 'success');
         await loadAllData();
-        renderBallsTable();
+        renderBallInventoryTable();
         
     } catch (error) {
-        console.error('볼 삭제 오류:', error);
-        showNotification('볼 삭제 중 오류가 발생했습니다.', 'error');
+        console.error('볼 재고 삭제 오류:', error);
+        showNotification('볼 재고 삭제 중 오류가 발생했습니다.', 'error');
     } finally {
         showLoading(false);
     }
@@ -1353,20 +1551,18 @@ async function deleteBall(ballId) {
 // ==================== 볼 사용기록 관리 ====================
 
 // 볼 사용기록 데이터 로드
-async function loadBallUsage() {
+async function loadBallUsageRecords() {
     const { data, error } = await supabase
-        .from('aq_ball_usage')
+        .from('aq_ball_usage_records')
         .select(`
             *,
-            ball:aq_tennis_balls(ball_code, brand),
-            member:aq_members!member_id(name, member_code),
-            court:aq_courts(name, court_number)
+            aq_members!member_id(name, member_code)
         `)
         .order('usage_date', { ascending: false });
     
     if (error) throw error;
-    ballUsage = data || [];
-    return ballUsage;
+    ballUsageRecords = data || [];
+    return ballUsageRecords;
 }
 
 // 볼 사용기록 테이블 렌더링
@@ -1374,13 +1570,13 @@ function renderBallUsageTable() {
     const tbody = document.getElementById('ballUsageTableBody');
     tbody.innerHTML = '';
 
-    ballUsage.forEach(usage => {
+    ballUsageRecords.forEach(usage => {
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td>${usage.ball.ball_code}</td>
-            <td>${usage.member.name} (${usage.member.member_code})</td>
+            <td>${usage.aq_members?.name || '알 수 없는 회원'}</td>
             <td>${usage.usage_date}</td>
-            <td>${usage.balls_taken}</td>
+            <td>${usage.quantity_used}개</td>
+            <td>${usage.notes || '-'}</td>
             <td>
                 <button class="btn btn-sm btn-warning" onclick="editBallUsage('${usage.id}')">
                     <i class="fas fa-edit"></i> 수정
@@ -1402,7 +1598,7 @@ function openBallUsageModal(usageId = null) {
     
     if (usageId) {
         title.textContent = '볼 사용기록 수정';
-        const usage = ballUsage.find(u => u.id === usageId);
+        const usage = ballUsageRecords.find(u => u.id === usageId);
         if (usage) {
             fillBallUsageForm(usage);
         }
@@ -1423,11 +1619,17 @@ function closeBallUsageModal() {
 
 // 볼 사용기록 폼 채우기
 function fillBallUsageForm(usage) {
-    document.getElementById('usageBall').value = usage.ball_id;
+    // 회원 셀렉트 옵션을 먼저 업데이트
+    updateSelectOptions();
+    
+    // 폼 데이터 채우기
     document.getElementById('usageMember').value = usage.member_id;
     document.getElementById('usageDate').value = usage.usage_date;
-    document.getElementById('ballsTaken').value = usage.balls_taken;
+    document.getElementById('quantityUsed').value = usage.quantity_used;
     document.getElementById('usageNotes').value = usage.notes || '';
+    
+    // 사용 가능한 갯수 업데이트
+    updateAvailableQuantity();
 }
 
 // 볼 사용기록 폼 제출 처리
@@ -1435,27 +1637,71 @@ async function handleBallUsageSubmit(e) {
     e.preventDefault();
     
     const formData = {
-        ball_id: document.getElementById('usageBall').value,
         member_id: document.getElementById('usageMember').value,
         usage_date: document.getElementById('usageDate').value,
-        balls_taken: parseInt(document.getElementById('ballsTaken').value),
+        quantity_used: parseInt(document.getElementById('quantityUsed').value),
         notes: document.getElementById('usageNotes').value || null
     };
 
     try {
         showLoading(true);
         
+        // 사용 가능한 갯수 확인
+        const { data: inventory, error: inventoryError } = await supabase
+            .from('aq_ball_inventory')
+            .select('available_quantity')
+            .eq('member_id', formData.member_id)
+            .eq('is_active', true)
+            .single();
+        
+        if (inventoryError) {
+            throw new Error('해당 회원의 볼 재고 정보를 찾을 수 없습니다.');
+        }
+        
+        if (formData.quantity_used > inventory.available_quantity) {
+            showNotification(`사용 가능한 볼 갯수(${inventory.available_quantity}개)를 초과했습니다.`, 'error');
+            return;
+        }
+        
         if (editingId) {
-        const { error } = await supabase
-            .from('aq_ball_usage')
-            .update(formData)
-            .eq('id', editingId);
+            // 수정 시에는 기존 사용량을 되돌리고 새로 적용
+            const { data: oldUsage, error: oldUsageError } = await supabase
+                .from('aq_ball_usage_records')
+                .select('quantity_used')
+                .eq('id', editingId)
+                .single();
             
+            if (oldUsageError) throw oldUsageError;
+            
+            // 기존 사용량 되돌리기
+            await supabase
+                .from('aq_ball_inventory')
+                .update({ 
+                    used_quantity: used_quantity - oldUsage.quantity_used 
+                })
+                .eq('member_id', formData.member_id)
+                .eq('is_active', true);
+            
+            // 새 사용량 적용
+            await supabase
+                .from('aq_ball_inventory')
+                .update({ 
+                    used_quantity: used_quantity + formData.quantity_used 
+                })
+                .eq('member_id', formData.member_id)
+                .eq('is_active', true);
+            
+            const { error } = await supabase
+                .from('aq_ball_usage_records')
+                .update(formData)
+                .eq('id', editingId);
+                
             if (error) throw error;
             showNotification('볼 사용기록이 성공적으로 수정되었습니다.', 'success');
         } else {
+            // 새 사용기록 추가 (트리거가 자동으로 재고 업데이트)
             const { error } = await supabase
-                .from('aq_ball_usage')
+                .from('aq_ball_usage_records')
                 .insert([formData]);
             
             if (error) throw error;
@@ -1486,8 +1732,27 @@ async function deleteBallUsage(usageId) {
     try {
         showLoading(true);
         
+        // 사용기록 삭제 전에 사용량을 재고에서 되돌려야 함
+        const { data: usage, error: usageError } = await supabase
+            .from('aq_ball_usage_records')
+            .select('member_id, quantity_used')
+            .eq('id', usageId)
+            .single();
+        
+        if (usageError) throw usageError;
+        
+        // 재고에서 사용량 되돌리기
+        await supabase
+            .from('aq_ball_inventory')
+            .update({ 
+                used_quantity: used_quantity - usage.quantity_used 
+            })
+            .eq('member_id', usage.member_id)
+            .eq('is_active', true);
+        
+        // 사용기록 삭제
         const { error } = await supabase
-            .from('aq_ball_usage')
+            .from('aq_ball_usage_records')
             .delete()
             .eq('id', usageId);
         
@@ -1505,20 +1770,45 @@ async function deleteBallUsage(usageId) {
     }
 }
 
+// 사용 가능한 갯수 업데이트
+async function updateAvailableQuantity() {
+    const memberId = document.getElementById('usageMember').value;
+    const availableDisplay = document.getElementById('availableQuantityDisplay');
+    
+    if (!memberId) {
+        availableDisplay.textContent = '0';
+        return;
+    }
+    
+    try {
+        const { data: inventory, error } = await supabase
+            .from('aq_ball_inventory')
+            .select('available_quantity')
+            .eq('member_id', memberId)
+            .eq('is_active', true)
+            .single();
+        
+        if (error) {
+            availableDisplay.textContent = '0';
+            return;
+        }
+        
+        availableDisplay.textContent = inventory.available_quantity || '0';
+    } catch (error) {
+        console.error('사용 가능한 갯수 조회 오류:', error);
+        availableDisplay.textContent = '0';
+    }
+}
+
 // 볼 사용기록 필터링
 function filterBallUsage() {
     const dateFilter = document.getElementById('usageDateFilter').value;
-    const ballFilter = document.getElementById('ballFilter').value;
     const memberFilter = document.getElementById('memberFilter').value;
     
-    let filteredUsage = ballUsage;
+    let filteredUsage = ballUsageRecords;
     
     if (dateFilter) {
         filteredUsage = filteredUsage.filter(u => u.usage_date === dateFilter);
-    }
-    
-    if (ballFilter) {
-        filteredUsage = filteredUsage.filter(u => u.ball_id === ballFilter);
     }
     
     if (memberFilter) {
@@ -1531,16 +1821,10 @@ function filterBallUsage() {
     filteredUsage.forEach(usage => {
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td>${usage.ball.ball_code}</td>
-            <td>${usage.member.name} (${usage.member.member_code})</td>
-            <td>${usage.court ? `${usage.court.name} (${usage.court.court_number})` : '-'}</td>
+            <td>${usage.aq_members?.name || '알 수 없는 회원'}</td>
             <td>${usage.usage_date}</td>
-            <td>${usage.usage_start_time ? `${usage.usage_start_time} - ${usage.usage_end_time || ''}` : '-'}</td>
-            <td>${usage.balls_taken}</td>
-            <td>${usage.balls_returned}</td>
-            <td>${usage.balls_damaged}</td>
-            <td>${usage.balls_lost}</td>
-            <td>${getUsageTypeText(usage.usage_type)}</td>
+            <td>${usage.quantity_used}개</td>
+            <td>${usage.notes || '-'}</td>
             <td>
                 <button class="btn btn-sm btn-warning" onclick="editBallUsage('${usage.id}')">
                     <i class="fas fa-edit"></i> 수정
@@ -1573,34 +1857,18 @@ function calculateDuration(startTime, endTime) {
 
 // 셀렉트 옵션 업데이트
 function updateSelectOptions() {
-    // 회원 셀렉트
-    const memberSelects = ['reservationMember', 'usageMember'];
-    memberSelects.forEach(selectId => {
+    // 회원 셀렉트 (예약관리용)
+    const reservationMemberSelects = ['reservationMember'];
+    reservationMemberSelects.forEach(selectId => {
         const select = document.getElementById(selectId);
         if (select) {
             select.innerHTML = '<option value="">회원을 선택하세요</option>';
-            
-            if (selectId === 'usageMember') {
-                // 볼 사용기록에서는 거북코, 참치, 청새치만 표시
-                const specificMembers = members.filter(member => 
-                    member.name === '거북코' || member.name === '참치' || member.name === '청새치'
-                );
-                
-                specificMembers.forEach(member => {
-                    const option = document.createElement('option');
-                    option.value = member.id;
-                    option.textContent = `${member.name} (${member.member_code})`;
-                    select.appendChild(option);
-                });
-            } else {
-                // 예약관리에서는 모든 회원 표시
-                members.forEach(member => {
-                    const option = document.createElement('option');
-                    option.value = member.id;
-                    option.textContent = `${member.name} (${member.member_code})`;
-                    select.appendChild(option);
-                });
-            }
+            members.forEach(member => {
+                const option = document.createElement('option');
+                option.value = member.id;
+                option.textContent = `${member.name} (${member.member_code})`;
+                select.appendChild(option);
+            });
         }
     });
 
@@ -1619,18 +1887,37 @@ function updateSelectOptions() {
         }
     });
 
-    // 볼 셀렉트
-    const ballSelects = ['usageBall', 'ballFilter'];
-    ballSelects.forEach(selectId => {
+    // 볼 재고 및 사용기록 셀렉트
+    const ballMemberSelects = ['inventoryMember', 'usageMember', 'memberFilter'];
+    ballMemberSelects.forEach(selectId => {
         const select = document.getElementById(selectId);
         if (select) {
-            select.innerHTML = selectId === 'ballFilter' ? '<option value="">모든 볼</option>' : '<option value="">볼을 선택하세요</option>';
-            balls.forEach(ball => {
-                const option = document.createElement('option');
-                option.value = ball.id;
-                option.textContent = `${ball.ball_code} - ${ball.brand} ${ball.model || ''} (${ball.owner || '-'})`;
-                select.appendChild(option);
-            });
+            select.innerHTML = selectId === 'memberFilter' ? '<option value="">모든 회원</option>' : '<option value="">회원을 선택하세요</option>';
+            
+            if (selectId === 'usageMember') {
+                // 볼 사용기록에서는 볼이 있는 회원만 표시
+                const membersWithBalls = members.filter(member => {
+                    return ballInventory.some(inventory => 
+                        inventory.member_id === member.id && 
+                        inventory.available_quantity > 0
+                    );
+                });
+                
+                membersWithBalls.forEach(member => {
+                    const option = document.createElement('option');
+                    option.value = member.id;
+                    option.textContent = `${member.name} (${member.member_code})`;
+                    select.appendChild(option);
+                });
+            } else {
+                // 볼 재고관리와 필터에서는 모든 회원 표시
+                members.forEach(member => {
+                    const option = document.createElement('option');
+                    option.value = member.id;
+                    option.textContent = `${member.name} (${member.member_code})`;
+                    select.appendChild(option);
+                });
+            }
         }
     });
 
@@ -1736,7 +2023,7 @@ function renderCurrentTab() {
             renderReservationsTable();
             break;
         case 'balls':
-            renderBallsTable();
+            renderBallInventoryTable();
             break;
         case 'ball-usage':
             renderBallUsageTable();
@@ -1759,131 +2046,3 @@ async function refreshData() {
     }
 }
 
-// ==================== 볼나누기 관리 ====================
-
-// 볼나누기 모달 열기
-function openBallSplitModal() {
-    const modal = document.getElementById('ballSplitModal');
-    const ballSelect = document.getElementById('splitBall');
-    
-    // 볼 선택 옵션 업데이트
-    ballSelect.innerHTML = '<option value="">볼을 선택하세요</option>';
-    balls.forEach(ball => {
-        if (ball.quantity_available > 0) { // 사용 가능한 볼만 표시
-            const option = document.createElement('option');
-            option.value = ball.id;
-            option.textContent = `${ball.ball_code} - ${ball.brand} ${ball.model || ''} (${ball.owner}, ${ball.quantity_available}개)`;
-            ballSelect.appendChild(option);
-        }
-    });
-    
-    // 폼 초기화
-    document.getElementById('ballSplitForm').reset();
-    document.getElementById('splitFromOwner').value = '';
-    document.getElementById('maxSplitQuantity').textContent = '0';
-    
-    modal.style.display = 'block';
-}
-
-// 볼나누기 모달 닫기
-function closeBallSplitModal() {
-    document.getElementById('ballSplitModal').style.display = 'none';
-}
-
-// 볼 선택 시 정보 업데이트
-function updateSplitBallInfo() {
-    const ballId = document.getElementById('splitBall').value;
-    const ball = balls.find(b => b.id === ballId);
-    
-    if (ball) {
-        document.getElementById('splitFromOwner').value = ball.owner || '미지정';
-        document.getElementById('splitQuantity').max = ball.quantity_available;
-        document.getElementById('maxSplitQuantity').textContent = ball.quantity_available;
-        document.getElementById('splitQuantity').value = '';
-    } else {
-        document.getElementById('splitFromOwner').value = '';
-        document.getElementById('maxSplitQuantity').textContent = '0';
-        document.getElementById('splitQuantity').value = '';
-    }
-}
-
-// 볼나누기 폼 제출 처리
-async function handleBallSplitSubmit(e) {
-    e.preventDefault();
-    
-    const ballId = document.getElementById('splitBall').value;
-    const toOwner = document.getElementById('splitToOwner').value;
-    const splitQuantity = parseInt(document.getElementById('splitQuantity').value);
-    const notes = document.getElementById('splitNotes').value;
-    
-    const ball = balls.find(b => b.id === ballId);
-    if (!ball) {
-        showNotification('볼을 찾을 수 없습니다.', 'error');
-        return;
-    }
-    
-    if (splitQuantity > ball.quantity_available) {
-        showNotification('나눌 수량이 사용 가능한 수량을 초과합니다.', 'error');
-        return;
-    }
-    
-    if (ball.owner === toOwner) {
-        showNotification('같은 소유자에게는 볼을 나눌 수 없습니다.', 'error');
-        return;
-    }
-    
-    try {
-        showLoading(true);
-        
-        // 기존 볼의 수량 감소
-        const { error: updateError } = await supabase
-            .from('aq_tennis_balls')
-            .update({
-                quantity_available: ball.quantity_available - splitQuantity,
-                quantity_total: ball.quantity_total - splitQuantity
-            })
-            .eq('id', ballId);
-        
-        if (updateError) throw updateError;
-        
-        // 새로운 볼 생성 (받는 소유자용)
-        const timestamp = Date.now().toString().slice(-6); // 마지막 6자리만 사용
-        const newBallCode = `${ball.ball_code.slice(0, 8)}-${toOwner.slice(0, 2)}-${timestamp}`;
-        const { error: insertError } = await supabase
-            .from('aq_tennis_balls')
-            .insert([{
-                ball_code: newBallCode,
-                brand: ball.brand,
-                model: ball.model,
-                ball_type: ball.ball_type,
-                owner: toOwner,
-                color: ball.color,
-                condition_status: ball.condition_status,
-                purchase_date: ball.purchase_date,
-                purchase_price: ball.purchase_price,
-                supplier: ball.supplier,
-                batch_number: ball.batch_number,
-                quantity_total: splitQuantity,
-                quantity_available: splitQuantity,
-                quantity_in_use: 0,
-                quantity_damaged: 0,
-                storage_location: ball.storage_location,
-                notes: notes || `볼나누기: ${ball.owner} → ${toOwner}`,
-                is_active: true
-            }]);
-        
-        if (insertError) throw insertError;
-        
-        showNotification(`${splitQuantity}개의 볼을 ${toOwner}에게 성공적으로 나눠주었습니다.`, 'success');
-        
-        await loadAllData();
-        renderBallsTable();
-        closeBallSplitModal();
-        
-    } catch (error) {
-        console.error('볼나누기 오류:', error);
-        showNotification('볼나누기 중 오류가 발생했습니다.', 'error');
-    } finally {
-        showLoading(false);
-    }
-}

@@ -12,7 +12,13 @@
         <!-- 헤더 -->
         <header class="header">
             <div class="header-content">
-                <h1><i class="fas fa-tennis-ball"></i> Aqua Tennis Club</h1>
+                <div class="header-top">
+                    <div class="version-info">
+                        <span class="version-label">v</span>
+                        <span class="version-number" id="versionNumber">1.0.0</span>
+                    </div>
+                    <h1><i class="fas fa-tennis-ball"></i> Aqua Tennis Club</h1>
+                </div>
                 <nav class="nav-tabs">
                     <button class="nav-tab active" data-tab="reservations">
                         <i class="fas fa-calendar-alt"></i> 예약관리
@@ -140,34 +146,27 @@
                 </div>
             </section>
 
-            <!-- 볼관리 섹션 -->
+            <!-- 볼재고관리 섹션 -->
             <section id="balls" class="tab-content">
                 <div class="section-header">
-                    <h2>테니스볼 관리</h2>
-                    <div class="header-buttons">
-                        <button class="btn btn-primary" onclick="openBallModal()">
-                            <i class="fas fa-plus"></i> 새 볼 추가
-                        </button>
-                        <button class="btn btn-success" onclick="openBallSplitModal()">
-                            <i class="fas fa-share-alt"></i> 볼나누기
-                        </button>
-                    </div>
+                    <h2>볼 재고 관리</h2>
+                    <button class="btn btn-primary" onclick="openBallInventoryModal()">
+                        <i class="fas fa-plus"></i> 재고 추가/수정
+                    </button>
                 </div>
                 <div class="table-container">
-                    <table class="data-table" id="ballsTable">
+                    <table class="data-table" id="ballInventoryTable">
                         <thead>
                             <tr>
-                                <th>볼코드</th>
-                                <th>소유자</th>
-                                <th>브랜드</th>
-                                <th>모델</th>
-                                <th>총수량</th>
-                                <th>사용완료</th>
+                                <th>회원명</th>
+                                <th>총 갯수</th>
+                                <th>사용한 갯수</th>
                                 <th>재고</th>
+                                <th>메모</th>
                                 <th>작업</th>
                             </tr>
                         </thead>
-                        <tbody id="ballsTableBody">
+                        <tbody id="ballInventoryTableBody">
                             <!-- 동적으로 생성됨 -->
                         </tbody>
                     </table>
@@ -184,9 +183,6 @@
                 </div>
                 <div class="filter-bar">
                     <input type="date" id="usageDateFilter" onchange="filterBallUsage()">
-                    <select id="ballFilter" onchange="filterBallUsage()">
-                        <option value="">모든 볼</option>
-                    </select>
                     <select id="memberFilter" onchange="filterBallUsage()">
                         <option value="">모든 회원</option>
                     </select>
@@ -195,10 +191,10 @@
                     <table class="data-table" id="ballUsageTable">
                         <thead>
                             <tr>
-                                <th>볼코드</th>
                                 <th>회원명</th>
-                                <th>사용날짜</th>
-                                <th>사용한 볼 수</th>
+                                <th>날짜</th>
+                                <th>갯수</th>
+                                <th>메모</th>
                                 <th>작업</th>
                             </tr>
                         </thead>
@@ -467,91 +463,39 @@
         </div>
     </div>
 
-    <!-- 볼 추가/수정 모달 -->
-    <div id="ballModal" class="modal">
+    <!-- 볼재고관리 모달 -->
+    <div id="ballInventoryModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3 id="ballModalTitle">새 볼 추가</h3>
-                <span class="close" onclick="closeBallModal()">&times;</span>
+                <h3 id="ballInventoryModalTitle">볼 재고 관리</h3>
+                <span class="close" onclick="closeBallInventoryModal()">&times;</span>
             </div>
-            <form id="ballForm">
+            <form id="ballInventoryForm">
                 <div class="form-group">
-                    <label for="ballCode">볼코드:</label>
-                    <input type="text" id="ballCode" required readonly>
-                </div>
-                <div class="form-group">
-                    <label for="ballBrand">브랜드:</label>
-                    <input type="text" id="ballBrand" required>
-                </div>
-                <div class="form-group">
-                    <label for="ballModel">모델:</label>
-                    <input type="text" id="ballModel">
-                </div>
-                <div class="form-group">
-                    <label for="ballType">볼 타입:</label>
-                    <select id="ballType" required>
-                        <option value="regular">일반</option>
-                        <option value="pressureless">무압력</option>
-                        <option value="practice">연습용</option>
-                        <option value="tournament">대회용</option>
-                        <option value="junior">주니어</option>
+                    <label for="inventoryMember">회원:</label>
+                    <select id="inventoryMember" required>
+                        <option value="">회원을 선택하세요</option>
                     </select>
                 </div>
-                <div class="form-group">
-                    <label for="ballOwner">소유자:</label>
-                    <select id="ballOwner">
-                        <option value="">소유자를 선택하세요</option>
-                        <option value="거북코">거북코</option>
-                        <option value="참치">참치</option>
-                        <option value="청새치">청새치</option>
-                        <option value="클럽">클럽</option>
-                    </select>
+                <div class="form-group" id="memberDisplayGroup" style="display: none;">
+                    <label>회원:</label>
+                    <input type="text" id="memberDisplay" readonly class="readonly-input">
+                    <input type="hidden" id="inventoryMemberId">
                 </div>
                 <div class="form-group">
-                    <label for="ballColor">색상:</label>
-                    <select id="ballColor">
-                        <option value="yellow">노란색</option>
-                        <option value="white">흰색</option>
-                        <option value="orange">주황색</option>
-                        <option value="green">초록색</option>
-                    </select>
+                    <label for="totalQuantity">총 갯수:</label>
+                    <input type="number" id="totalQuantity" min="0" required>
                 </div>
                 <div class="form-group">
-                    <label for="conditionStatus">상태:</label>
-                    <select id="conditionStatus">
-                        <option value="new">새것</option>
-                        <option value="good">양호</option>
-                        <option value="fair">보통</option>
-                        <option value="poor">나쁨</option>
-                        <option value="damaged">손상</option>
-                    </select>
+                    <label for="usedQuantity">사용한 갯수:</label>
+                    <input type="number" id="usedQuantity" min="0" required>
                 </div>
                 <div class="form-group">
-                    <label for="purchaseDate">구매일:</label>
-                    <input type="date" id="purchaseDate">
-                </div>
-                <div class="form-group">
-                    <label for="purchasePrice">구매가격:</label>
-                    <input type="number" id="purchasePrice" step="0.01">
-                </div>
-                <div class="form-group">
-                    <label for="supplier">공급업체:</label>
-                    <input type="text" id="supplier">
-                </div>
-                <div class="form-group">
-                    <label for="quantityTotal">총 수량:</label>
-                    <input type="number" id="quantityTotal" min="0" required>
-                </div>
-                <div class="form-group">
-                    <label for="storageLocation">보관 위치:</label>
-                    <input type="text" id="storageLocation">
-                </div>
-                <div class="form-group">
-                    <label for="ballNotes">메모:</label>
-                    <textarea id="ballNotes"></textarea>
+                    <label for="inventoryNotes">메모:</label>
+                    <textarea id="inventoryNotes" placeholder="재고 관련 메모를 입력하세요"></textarea>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" onclick="closeBallModal()">취소</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeBallInventoryModal()">취소</button>
                     <button type="submit" class="btn btn-primary">저장</button>
                 </div>
             </form>
@@ -567,14 +511,8 @@
             </div>
             <form id="ballUsageForm">
                 <div class="form-group">
-                    <label for="usageBall">볼:</label>
-                    <select id="usageBall" required onchange="onUsageBallChange()">
-                        <option value="">볼을 선택하세요</option>
-                    </select>
-                </div>
-                <div class="form-group" style="display: none;">
                     <label for="usageMember">회원:</label>
-                    <select id="usageMember" required>
+                    <select id="usageMember" required onchange="updateAvailableQuantity()">
                         <option value="">회원을 선택하세요</option>
                     </select>
                 </div>
@@ -583,12 +521,13 @@
                     <input type="date" id="usageDate" required>
                 </div>
                 <div class="form-group">
-                    <label for="ballsTaken">사용한 볼 수:</label>
-                    <input type="number" id="ballsTaken" min="1" required>
+                    <label for="quantityUsed">사용한 갯수:</label>
+                    <input type="number" id="quantityUsed" min="1" required>
+                    <small class="form-text">사용 가능한 갯수: <span id="availableQuantityDisplay">0</span>개</small>
                 </div>
                 <div class="form-group">
                     <label for="usageNotes">메모:</label>
-                    <textarea id="usageNotes"></textarea>
+                    <textarea id="usageNotes" placeholder="사용 기록에 대한 메모를 입력하세요"></textarea>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" onclick="closeBallUsageModal()">취소</button>
@@ -598,50 +537,6 @@
         </div>
     </div>
 
-    <!-- 볼나누기 모달 -->
-    <div id="ballSplitModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>볼나누기</h3>
-                <span class="close" onclick="closeBallSplitModal()">&times;</span>
-            </div>
-            <form id="ballSplitForm" onsubmit="handleBallSplitSubmit(event)">
-                <div class="form-group">
-                    <label for="splitBall">나눌 볼:</label>
-                    <select id="splitBall" required onchange="updateSplitBallInfo()">
-                        <option value="">볼을 선택하세요</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="splitFromOwner">현재 소유자:</label>
-                    <input type="text" id="splitFromOwner" readonly>
-                </div>
-                <div class="form-group">
-                    <label for="splitToOwner">받을 소유자:</label>
-                    <select id="splitToOwner" required>
-                        <option value="">소유자를 선택하세요</option>
-                        <option value="거북코">거북코</option>
-                        <option value="참치">참치</option>
-                        <option value="청새치">청새치</option>
-                        <option value="클럽">클럽</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="splitQuantity">나눌 수량:</label>
-                    <input type="number" id="splitQuantity" min="1" required>
-                    <small class="form-text">최대 나눌 수량: <span id="maxSplitQuantity">0</span>개</small>
-                </div>
-                <div class="form-group">
-                    <label for="splitNotes">메모:</label>
-                    <textarea id="splitNotes" placeholder="볼나누기 사유나 메모를 입력하세요"></textarea>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" onclick="closeBallSplitModal()">취소</button>
-                    <button type="submit" class="btn btn-success">볼나누기</button>
-                </div>
-            </form>
-        </div>
-    </div>
 
     <!-- 로딩 오버레이 -->
     <div id="loadingOverlay" class="loading-overlay">
