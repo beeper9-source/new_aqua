@@ -11,6 +11,7 @@ let courts = [];
 let reservations = [];
 let ballInventory = [];
 let ballUsageRecords = [];
+let tempTodayUsage = {}; // 임시 저장용: {memberId: quantity}
 
 // 버전 관리
 const VERSION_KEY = 'aqua_tennis_version';
@@ -295,10 +296,13 @@ async function switchTab(tabName) {
                 await loadBallInventory();
                 renderBallInventoryTable();
                 break;
-            case 'ball-usage':
-                await loadBallUsageRecords();
-                renderBallUsageTable();
-                break;
+        case 'ball-usage':
+            await loadBallUsageRecords();
+            // 임시 저장 초기화
+            tempTodayUsage = {};
+            renderBallUsageInputTable();
+            renderBallUsageHistoryTable();
+            break;
         }
         
         // 셀렉트 옵션 업데이트 (필요한 경우)
@@ -1310,16 +1314,7 @@ function renderBallInventoryTable() {
         const row = document.createElement('tr');
         row.innerHTML = `
             <td>${inventory.aq_members?.name || '알 수 없는 회원'}</td>
-            <td>
-                <input type="number" 
-                       class="quantity-input" 
-                       value="${inventory.total_quantity}" 
-                       min="0" 
-                       data-inventory-id="${inventory.id}"
-                       data-member-id="${inventory.member_id}"
-                       onchange="updateTotalQuantity('${inventory.id}', this.value)"
-                       style="width: 80px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;">
-            </td>
+            <td>${inventory.total_quantity}개</td>
             <td>${inventory.used_quantity}개</td>
             <td>${inventory.available_quantity}개</td>
             <td>
@@ -1332,6 +1327,9 @@ function renderBallInventoryTable() {
                        style="width: 120px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;">
             </td>
             <td>
+                <button class="btn btn-sm btn-warning" onclick="editBallInventory('${inventory.id}')">
+                    <i class="fas fa-edit"></i> 수정
+                </button>
                 <button class="btn btn-sm btn-danger" onclick="deleteBallInventory('${inventory.id}')">
                     <i class="fas fa-trash"></i> 삭제
                 </button>
@@ -1353,15 +1351,13 @@ function openBallInventoryModal(inventoryId = null) {
         title.textContent = '볼 재고 수정';
         const inventory = ballInventory.find(i => i.id === inventoryId);
         if (inventory) {
-            // 수정 시에는 회원 선택을 숨기고 읽기 전용으로 표시
-            memberSelectGroup.style.display = 'none';
-            memberDisplayGroup.style.display = 'block';
+            // 수정 시에도 회원 선택을 보여줌 (회원 변경 가능)
+            memberSelectGroup.style.display = 'block';
+            memberDisplayGroup.style.display = 'none';
             
-            // 회원명 표시
-            document.getElementById('memberDisplay').value = inventory.aq_members?.name || '알 수 없는 회원';
-            document.getElementById('inventoryMemberId').value = inventory.member_id;
-            
-            fillBallInventoryForm(inventory);
+            // 회원 셀렉트 옵션 업데이트 후 폼 데이터 채우기
+            updateSelectOptions();
+            fillBallInventoryForm(inventoryId);
         }
     } else {
         title.textContent = '볼 재고 추가';
@@ -1384,14 +1380,17 @@ function closeBallInventoryModal() {
 }
 
 // 볼 재고 폼 채우기
-function fillBallInventoryForm(inventory) {
-    // 회원 셀렉트 옵션을 먼저 업데이트
-    updateSelectOptions();
+function fillBallInventoryForm(inventoryId) {
+    // 해당 재고 정보 찾기
+    const inventory = ballInventory.find(i => i.id === inventoryId);
+    if (!inventory) {
+        console.error('재고 정보를 찾을 수 없습니다:', inventoryId);
+        return;
+    }
     
     // 폼 데이터 채우기
     document.getElementById('inventoryMember').value = inventory.member_id;
     document.getElementById('totalQuantity').value = inventory.total_quantity;
-    document.getElementById('usedQuantity').value = inventory.used_quantity;
     document.getElementById('inventoryNotes').value = inventory.notes || '';
 }
 
@@ -1399,15 +1398,12 @@ function fillBallInventoryForm(inventory) {
 async function handleBallInventorySubmit(e) {
     e.preventDefault();
     
-    // 수정 시에는 숨겨진 회원 ID를 사용, 새로 추가 시에는 셀렉트 값을 사용
-    const memberId = editingId ? 
-        document.getElementById('inventoryMemberId').value : 
-        document.getElementById('inventoryMember').value;
+    // 모든 경우에 셀렉트 값을 사용 (수정 시에도 회원 변경 가능)
+    const memberId = document.getElementById('inventoryMember').value;
     
     const formData = {
         member_id: memberId,
         total_quantity: parseInt(document.getElementById('totalQuantity').value),
-        used_quantity: parseInt(document.getElementById('usedQuantity').value),
         notes: document.getElementById('inventoryNotes').value || null
     };
 
@@ -1473,31 +1469,11 @@ function editBallInventory(inventoryId) {
 }
 
 // 총 갯수 업데이트
+// 총 갯수 업데이트 (비활성화됨 - 직접 수정 불가)
 async function updateTotalQuantity(inventoryId, newQuantity) {
-    try {
-        const quantity = parseInt(newQuantity);
-        if (isNaN(quantity) || quantity < 0) {
-            showNotification('올바른 갯수를 입력해주세요.', 'error');
-            return;
-        }
-
-        const { error } = await supabase
-            .from('aq_ball_inventory')
-            .update({ total_quantity: quantity })
-            .eq('id', inventoryId);
-        
-        if (error) throw error;
-        
-        showNotification('총 갯수가 업데이트되었습니다.', 'success');
-        
-        // 데이터 새로고침 후 테이블 다시 렌더링
-        await loadBallInventory();
-        renderBallInventoryTable();
-        
-    } catch (error) {
-        console.error('총 갯수 업데이트 오류:', error);
-        showNotification('총 갯수 업데이트 중 오류가 발생했습니다.', 'error');
-    }
+    // 총 갯수는 직접 수정할 수 없습니다. 모달을 통해 수정해주세요.
+    alert('총 갯수는 직접 수정할 수 없습니다. 수정 버튼을 클릭하여 모달에서 수정해주세요.');
+    return;
 }
 
 // 메모 업데이트
@@ -1565,9 +1541,76 @@ async function loadBallUsageRecords() {
     return ballUsageRecords;
 }
 
-// 볼 사용기록 테이블 렌더링
-function renderBallUsageTable() {
-    const tbody = document.getElementById('ballUsageTableBody');
+// 볼 사용기록 입력 테이블 렌더링 (오늘 사용 갯수)
+function renderBallUsageInputTable() {
+    const tbody = document.getElementById('ballUsageInputTableBody');
+    tbody.innerHTML = '';
+
+    // 오늘 날짜
+    const today = new Date().toISOString().split('T')[0];
+    
+    // 볼이 있는 회원들만 필터링
+    const membersWithBalls = members.filter(member => {
+        return ballInventory.some(inventory => 
+            inventory.member_id === member.id && 
+            inventory.available_quantity > 0
+        );
+    });
+
+    membersWithBalls.forEach(member => {
+        // 해당 회원의 오늘 사용 기록 찾기 (데이터베이스에서)
+        const todayUsage = ballUsageRecords.find(usage => 
+            usage.member_id === member.id && 
+            usage.usage_date === today
+        );
+        
+        // 임시 저장에서 현재 값 가져오기
+        const tempQuantity = tempTodayUsage[member.id] || 0;
+        
+        // 표시할 사용량 (임시 저장이 있으면 임시 저장 값, 없으면 데이터베이스 값)
+        const displayQuantity = tempQuantity > 0 ? tempQuantity : (todayUsage ? todayUsage.quantity_used : 0);
+        
+        // 해당 회원의 총 사용 갯수 계산
+        const totalUsed = ballUsageRecords
+            .filter(usage => usage.member_id === member.id)
+            .reduce((sum, usage) => sum + usage.quantity_used, 0);
+        
+        // 해당 회원의 볼 재고 정보
+        const inventory = ballInventory.find(inv => inv.member_id === member.id);
+        
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${member.name} (${member.member_code})</td>
+            <td>
+                <div class="quantity-controls">
+                    <button class="btn btn-sm btn-outline-danger" 
+                            onclick="decreaseTodayUsage('${member.id}')"
+                            ${displayQuantity <= 0 ? 'disabled' : ''}>
+                        <i class="fas fa-minus"></i>
+                    </button>
+                    <span class="quantity-display">${displayQuantity}</span>
+                    <button class="btn btn-sm btn-outline-success" 
+                            onclick="increaseTodayUsage('${member.id}')"
+                            ${!inventory || inventory.available_quantity <= 0 ? 'disabled' : ''}>
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+            </td>
+            <td>
+                <button class="btn btn-sm btn-success" 
+                        onclick="saveTodayUsage('${member.id}')"
+                        ${tempQuantity <= 0 ? 'disabled' : ''}>
+                    <i class="fas fa-save"></i> 저장
+                </button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+// 볼 사용기록 이력 테이블 렌더링
+function renderBallUsageHistoryTable() {
+    const tbody = document.getElementById('ballUsageHistoryTableBody');
     tbody.innerHTML = '';
 
     ballUsageRecords.forEach(usage => {
@@ -1588,6 +1631,134 @@ function renderBallUsageTable() {
         `;
         tbody.appendChild(row);
     });
+}
+
+// 오늘 볼 사용량 증가 (임시 저장)
+function increaseTodayUsage(memberId) {
+    // 해당 회원의 볼 재고 확인
+    const inventory = ballInventory.find(inv => inv.member_id === memberId);
+    if (!inventory || inventory.available_quantity <= 0) {
+        alert('사용 가능한 볼이 없습니다.');
+        return;
+    }
+    
+    // 임시 저장에서 현재 값 가져오기
+    const currentQuantity = tempTodayUsage[memberId] || 0;
+    
+    // 임시 저장에 1 증가
+    tempTodayUsage[memberId] = currentQuantity + 1;
+    
+    // 테이블만 다시 렌더링 (데이터베이스 저장은 하지 않음)
+    renderBallUsageInputTable();
+}
+
+// 오늘 볼 사용량 감소 (임시 저장)
+function decreaseTodayUsage(memberId) {
+    // 임시 저장에서 현재 값 가져오기
+    const currentQuantity = tempTodayUsage[memberId] || 0;
+    
+    if (currentQuantity <= 0) {
+        alert('감소할 사용량이 없습니다.');
+        return;
+    }
+    
+    // 임시 저장에서 1 감소
+    tempTodayUsage[memberId] = currentQuantity - 1;
+    
+    // 0이 되면 임시 저장에서 제거
+    if (tempTodayUsage[memberId] === 0) {
+        delete tempTodayUsage[memberId];
+    }
+    
+    // 테이블만 다시 렌더링 (데이터베이스 저장은 하지 않음)
+    renderBallUsageInputTable();
+}
+
+// 오늘 볼 사용량 저장
+async function saveTodayUsage(memberId) {
+    const today = new Date().toISOString().split('T')[0];
+    
+    try {
+        // 임시 저장에서 사용량 가져오기
+        const tempQuantity = tempTodayUsage[memberId] || 0;
+        
+        if (tempQuantity <= 0) {
+            alert('저장할 사용량이 없습니다.');
+            return;
+        }
+        
+        // 기존 오늘 사용 기록 찾기
+        const existingUsage = ballUsageRecords.find(usage => 
+            usage.member_id === memberId && 
+            usage.usage_date === today
+        );
+        
+        if (existingUsage) {
+            // 기존 기록 업데이트
+            const { error } = await supabase
+                .from('aq_ball_usage_records')
+                .update({ quantity_used: tempQuantity })
+                .eq('id', existingUsage.id);
+            
+            if (error) throw error;
+        } else {
+            // 새 기록 생성
+            const { error } = await supabase
+                .from('aq_ball_usage_records')
+                .insert({
+                    member_id: memberId,
+                    usage_date: today,
+                    quantity_used: tempQuantity,
+                    notes: '간편 입력'
+                });
+            
+            if (error) throw error;
+        }
+        
+        // 임시 저장에서 제거
+        delete tempTodayUsage[memberId];
+        
+        // 저장 완료 메시지
+        alert(`${tempQuantity}개의 볼 사용이 저장되었습니다.`);
+        
+        // 데이터 새로고침
+        await loadBallUsageRecords();
+        await loadBallInventory();
+        renderBallUsageInputTable();
+        renderBallUsageHistoryTable();
+        
+    } catch (error) {
+        console.error('볼 사용량 저장 오류:', error);
+        alert('볼 사용량 저장 중 오류가 발생했습니다.');
+    }
+}
+
+// 회원의 모든 볼 사용기록 삭제 (이력 테이블에서 사용)
+async function deleteAllUsage(memberId) {
+    if (!confirm('해당 회원의 모든 볼 사용기록을 삭제하시겠습니까?')) {
+        return;
+    }
+    
+    try {
+        const { error } = await supabase
+            .from('aq_ball_usage_records')
+            .delete()
+            .eq('member_id', memberId);
+        
+        if (error) throw error;
+        
+        // 데이터 새로고침
+        await loadBallUsageRecords();
+        await loadBallInventory();
+        renderBallUsageInputTable();
+        renderBallUsageHistoryTable();
+        
+        alert('모든 볼 사용기록이 삭제되었습니다.');
+        
+    } catch (error) {
+        console.error('볼 사용기록 삭제 오류:', error);
+        alert('볼 사용기록 삭제 중 오류가 발생했습니다.');
+    }
 }
 
 // 볼 사용기록 모달 열기
@@ -1741,11 +1912,21 @@ async function deleteBallUsage(usageId) {
         
         if (usageError) throw usageError;
         
+        // 현재 재고의 used_quantity 값 가져오기
+        const { data: inventory, error: inventoryError } = await supabase
+            .from('aq_ball_inventory')
+            .select('used_quantity')
+            .eq('member_id', usage.member_id)
+            .eq('is_active', true)
+            .single();
+        
+        if (inventoryError) throw inventoryError;
+        
         // 재고에서 사용량 되돌리기
         await supabase
             .from('aq_ball_inventory')
             .update({ 
-                used_quantity: used_quantity - usage.quantity_used 
+                used_quantity: inventory.used_quantity - usage.quantity_used 
             })
             .eq('member_id', usage.member_id)
             .eq('is_active', true);
@@ -1760,7 +1941,8 @@ async function deleteBallUsage(usageId) {
         
         showNotification('볼 사용기록이 성공적으로 삭제되었습니다.', 'success');
         await loadAllData();
-        renderBallUsageTable();
+        renderBallUsageInputTable();
+        renderBallUsageHistoryTable();
         
     } catch (error) {
         console.error('볼 사용기록 삭제 오류:', error);
@@ -1800,10 +1982,76 @@ async function updateAvailableQuantity() {
     }
 }
 
-// 볼 사용기록 필터링
+// 볼 사용기록 입력 필터링 (오늘 사용 갯수)
 function filterBallUsage() {
-    const dateFilter = document.getElementById('usageDateFilter').value;
     const memberFilter = document.getElementById('memberFilter').value;
+    
+    // 볼이 있는 회원들만 필터링
+    let membersWithBalls = members.filter(member => {
+        return ballInventory.some(inventory => 
+            inventory.member_id === member.id && 
+            inventory.available_quantity > 0
+        );
+    });
+    
+    // 회원 필터 적용
+    if (memberFilter) {
+        membersWithBalls = membersWithBalls.filter(member => member.id === memberFilter);
+    }
+    
+    // 필터링된 회원들로 입력 테이블 렌더링
+    const tbody = document.getElementById('ballUsageInputTableBody');
+    tbody.innerHTML = '';
+
+    const today = new Date().toISOString().split('T')[0];
+    
+    membersWithBalls.forEach(member => {
+        // 해당 회원의 오늘 사용 기록 찾기
+        const todayUsage = ballUsageRecords.find(usage => 
+            usage.member_id === member.id && 
+            usage.usage_date === today
+        );
+        
+        // 해당 회원의 총 사용 갯수 계산
+        const totalUsed = ballUsageRecords
+            .filter(usage => usage.member_id === member.id)
+            .reduce((sum, usage) => sum + usage.quantity_used, 0);
+        
+        // 해당 회원의 볼 재고 정보
+        const inventory = ballInventory.find(inv => inv.member_id === member.id);
+        
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${member.name} (${member.member_code})</td>
+            <td>
+                <div class="quantity-controls">
+                    <button class="btn btn-sm btn-outline-danger" 
+                            onclick="decreaseTodayUsage('${member.id}')"
+                            ${!todayUsage || todayUsage.quantity_used <= 0 ? 'disabled' : ''}>
+                        <i class="fas fa-minus"></i>
+                    </button>
+                    <span class="quantity-display">${todayUsage ? todayUsage.quantity_used : 0}</span>
+                    <button class="btn btn-sm btn-outline-success" 
+                            onclick="increaseTodayUsage('${member.id}')"
+                            ${!inventory || inventory.available_quantity <= 0 ? 'disabled' : ''}>
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+            </td>
+            <td>
+                <button class="btn btn-sm btn-success" onclick="saveTodayUsage('${member.id}')">
+                    <i class="fas fa-save"></i> 저장
+                </button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+// 볼 사용기록 이력 필터링
+function filterBallUsageHistory() {
+    const dateFilter = document.getElementById('historyDateFilter').value;
+    const memberFilter = document.getElementById('historyMemberFilter').value;
     
     let filteredUsage = ballUsageRecords;
     
@@ -1815,7 +2063,7 @@ function filterBallUsage() {
         filteredUsage = filteredUsage.filter(u => u.member_id === memberFilter);
     }
     
-    const tbody = document.getElementById('ballUsageTableBody');
+    const tbody = document.getElementById('ballUsageHistoryTableBody');
     tbody.innerHTML = '';
 
     filteredUsage.forEach(usage => {
@@ -1888,11 +2136,11 @@ function updateSelectOptions() {
     });
 
     // 볼 재고 및 사용기록 셀렉트
-    const ballMemberSelects = ['inventoryMember', 'usageMember', 'memberFilter'];
+    const ballMemberSelects = ['inventoryMember', 'usageMember', 'memberFilter', 'historyMemberFilter'];
     ballMemberSelects.forEach(selectId => {
         const select = document.getElementById(selectId);
         if (select) {
-            select.innerHTML = selectId === 'memberFilter' ? '<option value="">모든 회원</option>' : '<option value="">회원을 선택하세요</option>';
+            select.innerHTML = selectId === 'memberFilter' || selectId === 'historyMemberFilter' ? '<option value="">모든 회원</option>' : '<option value="">회원을 선택하세요</option>';
             
             if (selectId === 'usageMember') {
                 // 볼 사용기록에서는 볼이 있는 회원만 표시
@@ -1909,8 +2157,23 @@ function updateSelectOptions() {
                     option.textContent = `${member.name} (${member.member_code})`;
                     select.appendChild(option);
                 });
+            } else if (selectId === 'inventoryMember') {
+                // 볼 재고 수정에서는 볼이 1개 이상 재고가 있는 회원만 표시
+                const membersWithBalls = members.filter(member => {
+                    return ballInventory.some(inventory => 
+                        inventory.member_id === member.id && 
+                        inventory.available_quantity >= 1
+                    );
+                });
+                
+                membersWithBalls.forEach(member => {
+                    const option = document.createElement('option');
+                    option.value = member.id;
+                    option.textContent = `${member.name} (${member.member_code})`;
+                    select.appendChild(option);
+                });
             } else {
-                // 볼 재고관리와 필터에서는 모든 회원 표시
+                // 필터에서는 모든 회원 표시
                 members.forEach(member => {
                     const option = document.createElement('option');
                     option.value = member.id;
@@ -2026,7 +2289,8 @@ function renderCurrentTab() {
             renderBallInventoryTable();
             break;
         case 'ball-usage':
-            renderBallUsageTable();
+            renderBallUsageInputTable();
+            renderBallUsageHistoryTable();
             break;
     }
 }

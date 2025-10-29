@@ -151,7 +151,7 @@
                 <div class="section-header">
                     <h2>볼 재고 관리</h2>
                     <button class="btn btn-primary" onclick="openBallInventoryModal()">
-                        <i class="fas fa-plus"></i> 재고 추가/수정
+                        <i class="fas fa-plus"></i> 재고 추가
                     </button>
                 </div>
                 <div class="table-container">
@@ -175,33 +175,59 @@
 
             <!-- 볼사용기록 섹션 -->
             <section id="ball-usage" class="tab-content">
+                <!-- 오늘 사용 갯수 입력 섹션 -->
                 <div class="section-header">
                     <h2>볼 사용 기록</h2>
-                    <button class="btn btn-primary" onclick="openBallUsageModal()">
-                        <i class="fas fa-plus"></i> 새 사용기록 추가
-                    </button>
+                    <div class="filter-bar">
+                        <select id="memberFilter" onchange="filterBallUsage()">
+                            <option value="">모든 회원</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="filter-bar">
-                    <input type="date" id="usageDateFilter" onchange="filterBallUsage()">
-                    <select id="memberFilter" onchange="filterBallUsage()">
-                        <option value="">모든 회원</option>
-                    </select>
-                </div>
-                <div class="table-container">
-                    <table class="data-table" id="ballUsageTable">
+                
+                <div class="usage-input-section">
+                    <h3>오늘 사용 갯수 입력</h3>
+                    <div class="table-container">
+                        <table class="data-table" id="ballUsageInputTable">
                         <thead>
                             <tr>
                                 <th>회원명</th>
-                                <th>날짜</th>
-                                <th>갯수</th>
-                                <th>메모</th>
+                                <th>오늘 사용한 갯수</th>
                                 <th>작업</th>
                             </tr>
                         </thead>
-                        <tbody id="ballUsageTableBody">
-                            <!-- 동적으로 생성됨 -->
-                        </tbody>
-                    </table>
+                            <tbody id="ballUsageInputTableBody">
+                                <!-- 동적으로 생성됨 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 사용 이력 섹션 -->
+                <div class="usage-history-section">
+                    <h3>사용 이력</h3>
+                    <div class="filter-bar">
+                        <input type="date" id="historyDateFilter" onchange="filterBallUsageHistory()">
+                        <select id="historyMemberFilter" onchange="filterBallUsageHistory()">
+                            <option value="">모든 회원</option>
+                        </select>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table" id="ballUsageHistoryTable">
+                            <thead>
+                                <tr>
+                                    <th>회원명</th>
+                                    <th>날짜</th>
+                                    <th>사용 갯수</th>
+                                    <th>메모</th>
+                                    <th>작업</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ballUsageHistoryTableBody">
+                                <!-- 동적으로 생성됨 -->
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </section>
         </main>
@@ -485,10 +511,6 @@
                 <div class="form-group">
                     <label for="totalQuantity">총 갯수:</label>
                     <input type="number" id="totalQuantity" min="0" required>
-                </div>
-                <div class="form-group">
-                    <label for="usedQuantity">사용한 갯수:</label>
-                    <input type="number" id="usedQuantity" min="0" required>
                 </div>
                 <div class="form-group">
                     <label for="inventoryNotes">메모:</label>
