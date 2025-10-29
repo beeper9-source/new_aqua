@@ -1313,6 +1313,7 @@ function renderBallInventoryTable() {
     ballInventory.forEach(inventory => {
         const row = document.createElement('tr');
         row.innerHTML = `
+            <td>${inventory.id}</td>
             <td>${inventory.aq_members?.name || '알 수 없는 회원'}</td>
             <td>${inventory.total_quantity}개</td>
             <td>${inventory.used_quantity}개</td>
