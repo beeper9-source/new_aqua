@@ -290,19 +290,20 @@ async function switchTab(tabName) {
                 break;
             case 'reservations':
                 await loadReservations();
-                renderReservationsTable();
+                // 기본 보기는 오늘 이상만 노출 (필터 미선택 시)
+                filterReservations();
                 break;
             case 'balls':
                 await loadBallInventory();
                 renderBallInventoryTable();
                 break;
-        case 'ball-usage':
+            case 'ball-usage':
             await loadBallUsageRecords();
             // 임시 저장 초기화
             tempTodayUsage = {};
             renderBallUsageInputTable();
             renderBallUsageHistoryTable();
-            break;
+                break;
         }
         
         // 셀렉트 옵션 업데이트 (필요한 경우)
@@ -807,6 +808,7 @@ async function deleteCourt(courtId) {
 
 // 예약 데이터 로드
 async function loadReservations() {
+    // 전체를 불러오고 화면단에서 기본 필터(오늘 이상)를 적용
     const { data, error } = await supabase
         .from('aq_reservations')
         .select(`
@@ -852,6 +854,191 @@ function getDayOfWeek(dateString) {
     return days[date.getDay()];
 }
 
+// 주차 계산 (월요일 시작, 1주차 기준)
+function getWeekOfMonthMondayBased(date) {
+    // 해당 달의 첫 번째 월요일을 찾는다
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const firstOfMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+    const firstDow = firstOfMonth.getDay(); // 0=일..1=월
+    const daysUntilFirstMonday = (8 - firstDow) % 7 || 7; // 첫 월요일까지 남은 일수 (1일이 월요일이면 7 -> 아래서 보정)
+    let firstMonday = new Date(d.getFullYear(), d.getMonth(), 1 + ((firstDow === 1) ? 0 : daysUntilFirstMonday));
+
+    // 1일이 월요일이면 daysUntilFirstMonday 계산이 7이 되어버리므로 보정
+    if (firstDow === 1) firstMonday = new Date(d.getFullYear(), d.getMonth(), 1);
+
+    // 해당 날짜가 첫 월요일 이전이라도 1주차로 간주
+    if (d < firstMonday) return 1;
+
+    const diffDays = Math.floor((d - firstMonday) / (1000 * 60 * 60 * 24));
+    return Math.floor(diffDays / 7) + 1;
+}
+
+// 다음주 월요일 날짜 구하기
+function getNextMonday(from = new Date()) {
+    const d = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+    const day = d.getDay(); // 0=일 .. 1=월
+    // 다음주 월요일: 남은 요일 + 7 (월요일 포함하지 않음)
+    const daysUntilNextMon = ((8 - day) % 7) || 7;
+    d.setDate(d.getDate() + daysUntilNextMon);
+    return d;
+}
+
+// 날짜 더하기 유틸 (불변)
+function addDays(date, days) {
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    d.setDate(d.getDate() + days);
+    return d;
+}
+
+// 날짜 yyyy-mm-dd 포맷
+function toDateStr(date) {
+    return date.toISOString().split('T')[0];
+}
+
+// 차주 예약 일괄 세팅
+async function setupNextWeekReservations() {
+    try {
+        showLoading(true);
+        // 데이터 보장
+        if (!members.length) await loadMembers();
+        if (!courts.length) await loadCourts();
+
+    const nextMonday = getNextMonday(new Date());
+    const weekOfMonth = getWeekOfMonthMondayBased(nextMonday);
+    const targetWeekNum = weekOfMonth;
+
+        // 차주 수요일(+3), 목요일(+4)
+        const wed = addDays(nextMonday, 3);
+        const thu = addDays(nextMonday, 4);
+        const targetDates = [toDateStr(wed), toDateStr(thu)];
+
+    // 대상 회원 필터: reservation_group 내 숫자만 파싱하여 비교
+    const targetMembers = members.filter(m => {
+        const grp = (m.reservation_group || '').toString().trim();
+        const match = grp.match(/(\d+)/);
+        const num = match ? parseInt(match[1], 10) : NaN;
+        return !Number.isNaN(num) && num === targetWeekNum;
+    });
+    if (!targetMembers.length) {
+        showNotification(`${targetWeekNum}주차 대상 회원이 없습니다.`, 'warning');
+        return;
+    }
+
+        // 기존 충돌 방지를 위해 해당 회원/날짜 예약 미리 조회
+        const { data: existing, error: exErr } = await supabase
+            .from('aq_reservations')
+            .select('id, member_id, reservation_date, court_id');
+        if (exErr) throw exErr;
+
+    let created = 0, skipped = 0, defaultCourtAssigned = 0, roundRobinAssigned = 0;
+    const toInt = (v) => {
+        if (v === null || v === undefined) return NaN;
+        const m = String(v).match(/(\d+)/);
+        return m ? parseInt(m[1], 10) : NaN;
+    };
+    const hashId = (id) => {
+        const s = String(id);
+        let h = 0;
+        for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+        return h;
+    };
+    const resolveCourtId = (member, memberIndex) => {
+        // 1) court_id가 직접 있으면 우선 사용
+        if (member.court_id) {
+            const direct = courts.find(c => c.id === member.court_id);
+            if (direct) return { id: direct.id, mode: 'direct' };
+        }
+        // 2) court_number 정수 매칭
+        const desiredNum = toInt(member.court_number);
+        if (!Number.isNaN(desiredNum)) {
+            const byNum = courts.find(c => toInt(c.court_number) === desiredNum);
+            if (byNum) return { id: byNum.id, mode: 'number' };
+        }
+        // 3) 이름에 숫자 포함 매칭
+        if (!Number.isNaN(desiredNum)) {
+            const byNameNum = courts.find(c => toInt(c.name) === desiredNum);
+            if (byNameNum) return { id: byNameNum.id, mode: 'name-number' };
+        }
+        // 4) 라운드로빈 분산 배정 (fallback)
+        if (courts.length > 0) {
+            const idx = courts.length > 1
+                ? (hashId(member.id) + (memberIndex || 0)) % courts.length
+                : 0;
+            roundRobinAssigned++;
+            return { id: courts[idx].id, mode: 'roundrobin' };
+        }
+        return { id: null, mode: 'none' };
+    };
+    for (let mi = 0; mi < targetMembers.length; mi++) {
+        const member = targetMembers[mi];
+        // 코트 매핑: 회원의 court_number -> courts.id (없으면 기본 배정)
+        const { id: courtId, mode } = resolveCourtId(member, mi);
+        if (!courtId) { skipped++; continue; }
+        if (mode === 'roundrobin') defaultCourtAssigned++;
+
+            for (const dateStr of targetDates) {
+                // 코트 후보 목록 구성: 선호 코트 우선, 이후 전체 코트 순회
+                const orderedCourts = [courtId, ...courts.map(c => c.id).filter(id => id !== courtId)];
+                let inserted = false;
+                let reservation_code = await generateReservationCode(true);
+                const start_time = '08:00';
+                const end_time = calculateEndTime(start_time);
+                const game_date = toDateStr(addDays(new Date(dateStr), 4));
+
+                for (const cid of orderedCourts) {
+                    // 동일 회원/날짜/코트 중복 선제 차단
+                    const dup = (existing || []).some(r => r.member_id === member.id && r.reservation_date === dateStr && r.court_id === cid);
+                    if (dup) continue;
+
+                    const payload = {
+                        reservation_code,
+                        member_id: member.id,
+                        court_id: cid,
+                        reservation_date: dateStr,
+                        game_date,
+                        start_time,
+                        end_time,
+                        duration_hours: 2,
+                        guest_count: 4,
+                        special_requests: null,
+                        reservation_status: 'pending'
+                    };
+
+                    let attempt = 0;
+                    while (attempt < 3) {
+                        const { error: insErr } = await supabase
+                            .from('aq_reservations')
+                            .insert([payload], { onConflict: 'member_id,reservation_date,court_id', ignoreDuplicates: true });
+                        if (!insErr) { inserted = true; break; }
+                        const msg = (insErr.message || '').toLowerCase();
+                        const hint = (insErr.hint || '').toLowerCase();
+                        if (insErr.code === '409' || insErr.code === '23505' || msg.includes('duplicate') || msg.includes('conflict') || hint.includes('already exists')) {
+                            attempt++;
+                            reservation_code = await generateReservationCode(true);
+                            payload.reservation_code = reservation_code;
+                            continue;
+                        } else {
+                            attempt = 3;
+                        }
+                    }
+                    if (inserted) break;
+                }
+                if (!inserted) { skipped++; continue; }
+                created++;
+            }
+        }
+
+        await loadReservations();
+        filterReservations();
+    showNotification(`차주 예약 세팅 완료: 생성 ${created}건, 스킵 ${skipped}건${defaultCourtAssigned ? ` (분산 코트 배정 ${defaultCourtAssigned}건)` : ''}`, 'success');
+    } catch (error) {
+        console.error('차주 예약세팅 오류:', error);
+        showNotification('차주 예약세팅 중 오류가 발생했습니다.', 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
 // 예약 테이블 렌더링
 function renderReservationsTable() {
     const tbody = document.getElementById('reservationsTableBody');
@@ -892,7 +1079,14 @@ function renderReservationsTable() {
             <td>${reservation.aq_members?.name || '알 수 없는 회원'}</td>
             <td>${gameDateWithDay}</td>
             <td>${simpleTime}</td>
-            <td><span class="status-badge status-${reservation.reservation_status}">${getReservationStatusText(reservation.reservation_status)}</span></td>
+            <td>
+                <select onchange="updateReservationStatus('${reservation.id}', this.value)">
+                    <option value="pending" ${reservation.reservation_status === 'pending' ? 'selected' : ''}>${getReservationStatusText('pending')}</option>
+                    <option value="success" ${reservation.reservation_status === 'success' ? 'selected' : ''}>${getReservationStatusText('success')}</option>
+                    <option value="failed" ${reservation.reservation_status === 'failed' ? 'selected' : ''}>${getReservationStatusText('failed')}</option>
+                    <option value="cancelled" ${reservation.reservation_status === 'cancelled' ? 'selected' : ''}>${getReservationStatusText('cancelled')}</option>
+                </select>
+            </td>
             <td>
                 <button class="btn btn-sm btn-warning" onclick="editReservation('${reservation.id}')">
                     <i class="fas fa-edit"></i> 수정
@@ -904,6 +1098,23 @@ function renderReservationsTable() {
         `;
         tbody.appendChild(row);
     });
+}
+
+// 예약 상태 인라인 업데이트 (목록/필터 공통 사용)
+async function updateReservationStatus(reservationId, newStatus) {
+    try {
+        const { error } = await supabase
+            .from('aq_reservations')
+            .update({ reservation_status: newStatus })
+            .eq('id', reservationId);
+        if (error) throw error;
+        await loadReservations();
+        renderReservationsTable();
+        showNotification('예약 상태가 업데이트되었습니다.', 'success');
+    } catch (error) {
+        console.error('예약 상태 업데이트 오류:', error);
+        showNotification('상태 업데이트 중 오류가 발생했습니다.', 'error');
+    }
 }
 
 // 시작시간으로부터 종료시간 계산 (2시간 후)
@@ -932,7 +1143,7 @@ function updateGameDate() {
         document.getElementById('gameDate').value = '';
     }
 }
-async function generateReservationCode() {
+async function generateReservationCode(useRandomSuffix = false) {
     try {
         // 현재 연도와 월 가져오기
         const now = new Date();
@@ -952,13 +1163,20 @@ async function generateReservationCode() {
         let nextNumber = 1;
         if (data && data.length > 0) {
             // 가장 큰 번호에서 +1
-            const lastCode = data[0].reservation_code;
-            const lastNumber = parseInt(lastCode.substring(9)); // RES202412 뒤의 숫자 추출
+            const lastCode = data[0].reservation_code || '';
+            // RESYYYYMM + digits (하이픈 앞까지만 숫자 추출)
+            const m = lastCode.match(/RES\d{6}(\d+)/);
+            const lastNumber = m ? parseInt(m[1], 10) : 0;
             nextNumber = lastNumber + 1;
         }
         
         // 3자리 숫자로 포맷팅
-        return `RES${year}${month}${nextNumber.toString().padStart(3, '0')}`;
+        const base = `RES${year}${month}${nextNumber.toString().padStart(3, '0')}`;
+        if (useRandomSuffix) {
+            const rand = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+            return `${base}-${rand}`;
+        }
+        return base;
         
     } catch (error) {
         console.error('예약번호 생성 오류:', error);
@@ -1224,7 +1442,12 @@ function filterReservations() {
     let filteredReservations = reservations;
     
     if (dateFilter) {
-        filteredReservations = filteredReservations.filter(r => r.reservation_date === dateFilter);
+        // 날짜 필터는 FROM 조건: 지정일 이상 ~ 고정 TO(9999-01-01)
+        filteredReservations = filteredReservations.filter(r => r.reservation_date >= dateFilter);
+    } else {
+        // 디폴트: 오늘 날짜 이상만 표시
+        const todayStr = new Date().toISOString().split('T')[0];
+        filteredReservations = filteredReservations.filter(r => r.reservation_date >= todayStr);
     }
     
     if (courtFilter) {
@@ -1273,7 +1496,14 @@ function filterReservations() {
             <td>${reservation.aq_members?.name || '알 수 없는 회원'}</td>
             <td>${gameDateWithDay}</td>
             <td>${simpleTime}</td>
-            <td><span class="status-badge status-${reservation.reservation_status}">${getReservationStatusText(reservation.reservation_status)}</span></td>
+            <td>
+                <select onchange="updateReservationStatus('${reservation.id}', this.value)">
+                    <option value="pending" ${reservation.reservation_status === 'pending' ? 'selected' : ''}>${getReservationStatusText('pending')}</option>
+                    <option value="success" ${reservation.reservation_status === 'success' ? 'selected' : ''}>${getReservationStatusText('success')}</option>
+                    <option value="failed" ${reservation.reservation_status === 'failed' ? 'selected' : ''}>${getReservationStatusText('failed')}</option>
+                    <option value="cancelled" ${reservation.reservation_status === 'cancelled' ? 'selected' : ''}>${getReservationStatusText('cancelled')}</option>
+                </select>
+            </td>
             <td>
                 <button class="btn btn-sm btn-warning" onclick="editReservation('${reservation.id}')">
                     <i class="fas fa-edit"></i> 수정
@@ -1401,7 +1631,7 @@ async function handleBallInventorySubmit(e) {
     
     // 모든 경우에 셀렉트 값을 사용 (수정 시에도 회원 변경 가능)
     const memberId = document.getElementById('inventoryMember').value;
-    
+
     const formData = {
         member_id: memberId,
         total_quantity: parseInt(document.getElementById('totalQuantity').value),
@@ -1445,8 +1675,8 @@ async function handleBallInventorySubmit(e) {
                 // 새 재고 생성
                 const { error: insertError } = await supabase
                     .from('aq_ball_inventory')
-                    .insert([formData]);
-                
+                .insert([formData]);
+            
                 if (insertError) throw insertError;
                 showNotification('새 볼 재고가 성공적으로 추가되었습니다.', 'success');
             }
@@ -1863,11 +2093,11 @@ async function handleBallUsageSubmit(e) {
                 .eq('member_id', formData.member_id)
                 .eq('is_active', true);
             
-            const { error } = await supabase
+        const { error } = await supabase
                 .from('aq_ball_usage_records')
-                .update(formData)
-                .eq('id', editingId);
-                
+            .update(formData)
+            .eq('id', editingId);
+            
             if (error) throw error;
             showNotification('볼 사용기록이 성공적으로 수정되었습니다.', 'success');
         } else {
@@ -2112,12 +2342,12 @@ function updateSelectOptions() {
         const select = document.getElementById(selectId);
         if (select) {
             select.innerHTML = '<option value="">회원을 선택하세요</option>';
-            members.forEach(member => {
-                const option = document.createElement('option');
-                option.value = member.id;
-                option.textContent = `${member.name} (${member.member_code})`;
-                select.appendChild(option);
-            });
+                members.forEach(member => {
+                    const option = document.createElement('option');
+                    option.value = member.id;
+                    option.textContent = `${member.name} (${member.member_code})`;
+                    select.appendChild(option);
+                });
         }
     });
 
@@ -2153,7 +2383,7 @@ function updateSelectOptions() {
                 });
                 
                 membersWithBalls.forEach(member => {
-                    const option = document.createElement('option');
+                const option = document.createElement('option');
                     option.value = member.id;
                     option.textContent = `${member.name} (${member.member_code})`;
                     select.appendChild(option);
@@ -2179,8 +2409,8 @@ function updateSelectOptions() {
                     const option = document.createElement('option');
                     option.value = member.id;
                     option.textContent = `${member.name} (${member.member_code})`;
-                    select.appendChild(option);
-                });
+                select.appendChild(option);
+            });
             }
         }
     });

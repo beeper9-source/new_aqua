@@ -109,9 +109,14 @@
             <section id="reservations" class="tab-content active">
                 <div class="section-header">
                     <h2>예약 관리</h2>
-                    <button class="btn btn-primary" onclick="openReservationModal()">
-                        <i class="fas fa-plus"></i> 새 예약 추가
-                    </button>
+                    <div class="header-buttons">
+                        <button class="btn btn-primary" onclick="openReservationModal()">
+                            <i class="fas fa-plus"></i> 새 예약 추가
+                        </button>
+                        <button class="btn btn-secondary" onclick="setupNextWeekReservations()">
+                            <i class="fas fa-calendar-week"></i> 차주 예약세팅
+                        </button>
+                    </div>
                 </div>
                 <div class="filter-bar">
                     <input type="date" id="reservationDateFilter" onchange="filterReservations()">
