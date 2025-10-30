@@ -2133,36 +2133,8 @@ async function deleteBallUsage(usageId) {
     
     try {
         showLoading(true);
-        
-        // 사용기록 삭제 전에 사용량을 재고에서 되돌려야 함
-        const { data: usage, error: usageError } = await supabase
-            .from('aq_ball_usage_records')
-            .select('member_id, quantity_used')
-            .eq('id', usageId)
-            .single();
-        
-        if (usageError) throw usageError;
-        
-        // 현재 재고의 used_quantity 값 가져오기
-        const { data: inventory, error: inventoryError } = await supabase
-            .from('aq_ball_inventory')
-            .select('used_quantity')
-            .eq('member_id', usage.member_id)
-            .eq('is_active', true)
-            .single();
-        
-        if (inventoryError) throw inventoryError;
-        
-        // 재고에서 사용량 되돌리기
-        await supabase
-            .from('aq_ball_inventory')
-            .update({ 
-                used_quantity: inventory.used_quantity - usage.quantity_used 
-            })
-            .eq('member_id', usage.member_id)
-            .eq('is_active', true);
-        
-        // 사용기록 삭제
+
+        // 사용기록 삭제 (트리거가 재고 used_quantity를 자동 반영)
         const { error } = await supabase
             .from('aq_ball_usage_records')
             .delete()
@@ -2170,10 +2142,15 @@ async function deleteBallUsage(usageId) {
         
         if (error) throw error;
         
-        showNotification('볼 사용기록이 성공적으로 삭제되었습니다.', 'success');
-        await loadAllData();
+        // 재고/사용기록 동기화 재조회
+        await Promise.all([
+            loadBallUsageRecords(),
+            loadBallInventory()
+        ]);
         renderBallUsageInputTable();
         renderBallUsageHistoryTable();
+        renderBallInventoryTable();
+        showNotification('볼 사용기록이 성공적으로 삭제되었습니다.', 'success');
         
     } catch (error) {
         console.error('볼 사용기록 삭제 오류:', error);
@@ -2389,15 +2366,11 @@ function updateSelectOptions() {
                     select.appendChild(option);
                 });
             } else if (selectId === 'inventoryMember') {
-                // 볼 재고 수정에서는 볼이 1개 이상 재고가 있는 회원만 표시
-                const membersWithBalls = members.filter(member => {
-                    return ballInventory.some(inventory => 
-                        inventory.member_id === member.id && 
-                        inventory.available_quantity >= 1
-                    );
-                });
-                
-                membersWithBalls.forEach(member => {
+                // 볼 재고 수정에서는 지정한 3명만 노출
+                const allowedNames = new Set(['거북코', '참치', '청새치']);
+                const allowedMembers = members.filter(member => allowedNames.has(member.name));
+
+                allowedMembers.forEach(member => {
                     const option = document.createElement('option');
                     option.value = member.id;
                     option.textContent = `${member.name} (${member.member_code})`;
