@@ -15,7 +15,7 @@
                 <div class="header-top">
                     <div class="version-info">
                         <span class="version-label">v</span>
-                        <span class="version-number" id="versionNumber">1.0.0</span>
+                        <span class="version-number" id="versionNumber" onclick="openVersionModal()" style="cursor: pointer; text-decoration: underline;" title="버전 수정">1.0.0</span>
                     </div>
                     <h1><i class="fas fa-tennis-ball"></i> Aqua Tennis Club</h1>
                 </div>
@@ -26,7 +26,7 @@
                     <button class="nav-tab" data-tab="members">
                         <i class="fas fa-users"></i> 회원관리
                     </button>
-                    <button class="nav-tab" data-tab="courts">
+                    <button class="nav-tab" data-tab="courts" style="display: none;">
                         <i class="fas fa-map-marker-alt"></i> 코트관리
                     </button>
                     <button class="nav-tab" data-tab="balls">
@@ -534,6 +534,71 @@
         <div class="loading-spinner">
             <i class="fas fa-spinner fa-spin"></i>
             <p>로딩 중...</p>
+        </div>
+    </div>
+
+    <!-- 버전 수정 모달 -->
+    <div id="versionModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>버전 수정</h3>
+                <span class="close" onclick="closeVersionModal()">&times;</span>
+            </div>
+            <form id="versionForm">
+                <div class="form-group">
+                    <label for="versionMajor">Major:</label>
+                    <input type="number" id="versionMajor" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label for="versionMinor">Minor:</label>
+                    <input type="number" id="versionMinor" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label for="versionPatch">Patch:</label>
+                    <input type="number" id="versionPatch" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label for="versionNotes">릴리즈 노트:</label>
+                    <textarea id="versionNotes" placeholder="버전 변경 사항을 입력하세요"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-info" onclick="openVersionHistoryModal()">
+                        <i class="fas fa-history"></i> 히스토리 보기
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="closeVersionModal()">취소</button>
+                    <button type="submit" class="btn btn-primary">저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 버전 히스토리 모달 -->
+    <div id="versionHistoryModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h3>버전 히스토리</h3>
+                <span class="close" onclick="closeVersionHistoryModal()">&times;</span>
+            </div>
+            <div class="table-container" style="max-height: 500px; overflow-y: auto;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>버전</th>
+                            <th>상태</th>
+                            <th>릴리즈 노트</th>
+                            <th>생성일</th>
+                            <th>생성자</th>
+                            <th>작업</th>
+                        </tr>
+                    </thead>
+                    <tbody id="versionHistoryTableBody">
+                        <!-- 동적으로 생성됨 -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeVersionHistoryModal()">닫기</button>
+            </div>
         </div>
     </div>
 

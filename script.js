@@ -35,28 +35,8 @@ async function initializeVersion() {
         let currentVersion;
         
         if (currentVersionData) {
-            // 기존 버전이 있으면 패치 버전 증가
-            const versionParts = currentVersionData.version_number.split('.');
-            const major = parseInt(versionParts[0]);
-            const minor = parseInt(versionParts[1]);
-            const patch = parseInt(versionParts[2]) + 1; // 패치 버전 증가
-            
-            currentVersion = `${major}.${minor}.${patch}`;
-            
-            // 새 버전을 데이터베이스에 저장
-            const { error: insertError } = await supabase
-                .from('aq_version_management')
-                .insert([{
-                    version_number: currentVersion,
-                    release_notes: `Auto-increment patch version ${patch}`,
-                    created_by: 'system'
-                }]);
-            
-            if (insertError) {
-                console.error('버전 저장 오류:', insertError);
-                // 오류 시 기존 버전 사용
-                currentVersion = currentVersionData.version_number;
-            }
+            // 기존 버전이 있으면 그대로 사용 (자동 증가하지 않음)
+            currentVersion = currentVersionData.version_number;
         } else {
             // 첫 실행 시 초기 버전 설정
             currentVersion = '1.0.0';
@@ -161,17 +141,34 @@ async function rollbackToVersion(versionNumber) {
 // 수동 버전 생성
 async function createNewVersion(versionNumber, releaseNotes = '') {
     try {
+        // 기존 활성 버전 비활성화
+        await supabase
+            .from('aq_version_management')
+            .update({ is_active: false })
+            .eq('is_active', true);
+        
+        // 새 버전 생성 및 활성화
         const { error } = await supabase
             .from('aq_version_management')
             .insert([{
                 version_number: versionNumber,
                 release_notes: releaseNotes || `Manual version creation: ${versionNumber}`,
-                created_by: 'manual'
+                created_by: 'manual',
+                is_active: true
             }]);
         
         if (error) throw error;
         
-        showNotification(`새 버전 ${versionNumber}이 생성되었습니다.`, 'success');
+        // 로컬 스토리지 업데이트
+        localStorage.setItem(VERSION_KEY, versionNumber);
+        
+        // UI 업데이트
+        const versionElement = document.getElementById('versionNumber');
+        if (versionElement) {
+            versionElement.textContent = versionNumber;
+        }
+        
+        showNotification(`버전이 ${versionNumber}으로 변경되었습니다.`, 'success');
         return true;
     } catch (error) {
         console.error('버전 생성 오류:', error);
@@ -180,9 +177,101 @@ async function createNewVersion(versionNumber, releaseNotes = '') {
     }
 }
 
+// 버전 모달 열기
+function openVersionModal() {
+    const modal = document.getElementById('versionModal');
+    const currentVersion = document.getElementById('versionNumber').textContent;
+    const versionParts = currentVersion.split('.');
+    
+    document.getElementById('versionMajor').value = versionParts[0] || '1';
+    document.getElementById('versionMinor').value = versionParts[1] || '0';
+    document.getElementById('versionPatch').value = versionParts[2] || '0';
+    document.getElementById('versionNotes').value = '';
+    
+    modal.style.display = 'block';
+}
+
+// 버전 모달 닫기
+function closeVersionModal() {
+    document.getElementById('versionModal').style.display = 'none';
+}
+
+// 버전 히스토리 모달 열기
+async function openVersionHistoryModal() {
+    const modal = document.getElementById('versionHistoryModal');
+    const tbody = document.getElementById('versionHistoryTableBody');
+    
+    try {
+        showLoading(true);
+        const history = await getVersionHistory();
+        
+        tbody.innerHTML = '';
+        
+        if (history.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">버전 히스토리가 없습니다.</td></tr>';
+        } else {
+            history.forEach(version => {
+                const row = document.createElement('tr');
+                const createdDate = new Date(version.created_at).toLocaleString('ko-KR');
+                row.innerHTML = `
+                    <td>${version.version_number}</td>
+                    <td>
+                        <span class="status-badge ${version.is_active ? 'status-active' : 'status-inactive'}">
+                            ${version.is_active ? '활성' : '비활성'}
+                        </span>
+                    </td>
+                    <td>${version.release_notes || '-'}</td>
+                    <td>${createdDate}</td>
+                    <td>${version.created_by || 'system'}</td>
+                    <td>
+                        ${!version.is_active ? `
+                            <button class="btn btn-sm btn-info" onclick="rollbackToVersion('${version.version_number}')" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;">
+                                <i class="fas fa-undo"></i> 롤백
+                            </button>
+                        ` : '<span style="color: #999;">현재 버전</span>'}
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+        
+        modal.style.display = 'block';
+    } catch (error) {
+        console.error('버전 히스토리 로드 오류:', error);
+        showNotification('버전 히스토리를 불러오는 중 오류가 발생했습니다.', 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
+// 버전 히스토리 모달 닫기
+function closeVersionHistoryModal() {
+    document.getElementById('versionHistoryModal').style.display = 'none';
+}
+
 // 페이지 로드 시 초기화
 document.addEventListener('DOMContentLoaded', function() {
     initializeApp();
+    
+    // 버전 폼 제출 처리
+    const versionForm = document.getElementById('versionForm');
+    if (versionForm) {
+        versionForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const major = document.getElementById('versionMajor').value;
+            const minor = document.getElementById('versionMinor').value;
+            const patch = document.getElementById('versionPatch').value;
+            const notes = document.getElementById('versionNotes').value;
+            
+            const newVersion = `${major}.${minor}.${patch}`;
+            
+            const success = await createNewVersion(newVersion, notes);
+            if (success) {
+                closeVersionModal();
+            }
+        });
+    }
 });
 
 // 앱 초기화
