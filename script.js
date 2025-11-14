@@ -428,13 +428,43 @@ function renderMembersTable() {
 
     members.forEach(member => {
         const row = document.createElement('tr');
+        const contactName = member.emergency_contact_name || '-';
+        const contactPhone = member.emergency_contact_phone || '-';
+        
+        // 주차별 하일라이트 클래스 추가
+        const reservationGroup = member.reservation_group || 'N/A';
+        if (reservationGroup === '1주차') {
+            row.classList.add('week-1');
+        } else if (reservationGroup === '2주차') {
+            row.classList.add('week-2');
+        } else if (reservationGroup === '3주차') {
+            row.classList.add('week-3');
+        } else if (reservationGroup === '4주차') {
+            row.classList.add('week-4');
+        } else {
+            row.classList.add('week-na');
+        }
+        
         row.innerHTML = `
             <td>${member.reservation_group}</td>
             <td>${member.court_number || '-'}</td>
-            <td>${member.member_code}</td>
             <td>${member.name}</td>
-            <td>${getMembershipTypeText(member.membership_type)}</td>
-            <td>${getSkillLevelText(member.skill_level)}</td>
+            <td>
+                ${contactName}
+                <button class="btn btn-xs btn-info copy-name-btn" 
+                        data-text="${contactName.replace(/"/g, '&quot;')}" 
+                        title="이름 복사" style="margin-left: 5px; padding: 2px 6px;">
+                    <i class="fas fa-copy"></i>
+                </button>
+            </td>
+            <td>
+                ${contactPhone}
+                <button class="btn btn-xs btn-info copy-phone-btn" 
+                        data-text="${contactPhone.replace(/"/g, '&quot;')}" 
+                        title="핸드폰번호 복사" style="margin-left: 5px; padding: 2px 6px;">
+                    <i class="fas fa-copy"></i>
+                </button>
+            </td>
             <td><span class="status-badge ${member.is_active ? 'status-active' : 'status-inactive'}">${member.is_active ? '활성' : '비활성'}</span></td>
             <td>
                 <button class="btn btn-sm btn-warning" onclick="editMember('${member.id}')">
@@ -445,6 +475,22 @@ function renderMembersTable() {
                 </button>
             </td>
         `;
+        // 이름 복사 버튼에 이벤트 리스너 추가
+        const copyNameBtn = row.querySelector('.copy-name-btn');
+        if (copyNameBtn) {
+            copyNameBtn.addEventListener('click', function() {
+                const text = this.getAttribute('data-text');
+                copyText(text, '이름');
+            });
+        }
+        // 핸드폰번호 복사 버튼에 이벤트 리스너 추가
+        const copyPhoneBtn = row.querySelector('.copy-phone-btn');
+        if (copyPhoneBtn) {
+            copyPhoneBtn.addEventListener('click', function() {
+                const text = this.getAttribute('data-text');
+                copyText(text, '핸드폰번호');
+            });
+        }
         tbody.appendChild(row);
     });
 }
@@ -469,7 +515,11 @@ async function openMemberModal(memberId = null) {
         const memberCode = await generateMemberCode();
         document.getElementById('memberCode').value = memberCode;
         
-        document.getElementById('membershipStartDate').value = new Date().toISOString().split('T')[0];
+        // 예약조 기본값을 N/A로 설정
+        document.getElementById('reservationGroup').value = 'N/A';
+        
+        // 상태 기본값을 활성으로 설정
+        document.getElementById('memberStatus').value = 'true';
     }
     
     // 예약조 변경 이벤트 리스너 추가
@@ -501,15 +551,9 @@ function fillMemberForm(member) {
     // 코트번호 설정 (옵션 업데이트 후)
     document.getElementById('courtNumber').value = member.court_number || '';
     
-    document.getElementById('memberBirthDate').value = member.birth_date || '';
-    document.getElementById('memberGender').value = member.gender || '';
-    document.getElementById('memberAddress').value = member.address || '';
-    document.getElementById('membershipType').value = member.membership_type;
-    document.getElementById('membershipStartDate').value = member.membership_start_date;
-    document.getElementById('membershipEndDate').value = member.membership_end_date || '';
-    document.getElementById('skillLevel').value = member.skill_level;
     document.getElementById('emergencyContactName').value = member.emergency_contact_name || '';
     document.getElementById('emergencyContactPhone').value = member.emergency_contact_phone || '';
+    document.getElementById('memberStatus').value = member.is_active ? 'true' : 'false';
     document.getElementById('memberNotes').value = member.notes || '';
 }
 
@@ -529,15 +573,16 @@ async function handleMemberSubmit(e) {
         name: document.getElementById('memberName').value,
         reservation_group: document.getElementById('reservationGroup').value,
         court_number: document.getElementById('courtNumber').value || null,
-        birth_date: document.getElementById('memberBirthDate').value || null,
-        gender: document.getElementById('memberGender').value || null,
-        address: document.getElementById('memberAddress').value || null,
-        membership_type: document.getElementById('membershipType').value,
-        membership_start_date: document.getElementById('membershipStartDate').value,
-        membership_end_date: document.getElementById('membershipEndDate').value || null,
-        skill_level: document.getElementById('skillLevel').value,
+        birth_date: null,
+        gender: null,
+        address: null,
+        membership_type: 'regular',
+        membership_start_date: new Date().toISOString().split('T')[0],
+        membership_end_date: null,
+        skill_level: 'beginner',
         emergency_contact_name: document.getElementById('emergencyContactName').value || null,
         emergency_contact_phone: document.getElementById('emergencyContactPhone').value || null,
+        is_active: document.getElementById('memberStatus').value === 'true',
         notes: document.getElementById('memberNotes').value || null
     };
 
@@ -619,13 +664,43 @@ function searchMembers() {
 
     filteredMembers.forEach(member => {
         const row = document.createElement('tr');
+        const contactName = member.emergency_contact_name || '-';
+        const contactPhone = member.emergency_contact_phone || '-';
+        
+        // 주차별 하일라이트 클래스 추가
+        const reservationGroup = member.reservation_group || 'N/A';
+        if (reservationGroup === '1주차') {
+            row.classList.add('week-1');
+        } else if (reservationGroup === '2주차') {
+            row.classList.add('week-2');
+        } else if (reservationGroup === '3주차') {
+            row.classList.add('week-3');
+        } else if (reservationGroup === '4주차') {
+            row.classList.add('week-4');
+        } else {
+            row.classList.add('week-na');
+        }
+        
         row.innerHTML = `
             <td>${member.reservation_group}</td>
             <td>${member.court_number || '-'}</td>
-            <td>${member.member_code}</td>
             <td>${member.name}</td>
-            <td>${getMembershipTypeText(member.membership_type)}</td>
-            <td>${getSkillLevelText(member.skill_level)}</td>
+            <td>
+                ${contactName}
+                <button class="btn btn-xs btn-info copy-name-btn" 
+                        data-text="${contactName.replace(/"/g, '&quot;')}" 
+                        title="이름 복사" style="margin-left: 5px; padding: 2px 6px;">
+                    <i class="fas fa-copy"></i>
+                </button>
+            </td>
+            <td>
+                ${contactPhone}
+                <button class="btn btn-xs btn-info copy-phone-btn" 
+                        data-text="${contactPhone.replace(/"/g, '&quot;')}" 
+                        title="핸드폰번호 복사" style="margin-left: 5px; padding: 2px 6px;">
+                    <i class="fas fa-copy"></i>
+                </button>
+            </td>
             <td><span class="status-badge ${member.is_active ? 'status-active' : 'status-inactive'}">${member.is_active ? '활성' : '비활성'}</span></td>
             <td>
                 <button class="btn btn-sm btn-warning" onclick="editMember('${member.id}')">
@@ -636,8 +711,59 @@ function searchMembers() {
                 </button>
             </td>
         `;
+        // 이름 복사 버튼에 이벤트 리스너 추가
+        const copyNameBtn = row.querySelector('.copy-name-btn');
+        if (copyNameBtn) {
+            copyNameBtn.addEventListener('click', function() {
+                const text = this.getAttribute('data-text');
+                copyText(text, '이름');
+            });
+        }
+        // 핸드폰번호 복사 버튼에 이벤트 리스너 추가
+        const copyPhoneBtn = row.querySelector('.copy-phone-btn');
+        if (copyPhoneBtn) {
+            copyPhoneBtn.addEventListener('click', function() {
+                const text = this.getAttribute('data-text');
+                copyText(text, '핸드폰번호');
+            });
+        }
         tbody.appendChild(row);
     });
+}
+
+// 텍스트 복사 함수
+async function copyText(text, label = '') {
+    if (text === '-') {
+        showNotification(`${label}이(가) 없습니다.`, 'error');
+        return;
+    }
+    
+    try {
+        // 클립보드에 복사
+        await navigator.clipboard.writeText(text);
+        
+        // 성공 메시지 표시
+        showNotification(`${label}이(가) 복사되었습니다.`, 'success');
+    } catch (error) {
+        console.error('복사 오류:', error);
+        // 클립보드 API가 지원되지 않는 경우 대체 방법 사용
+        try {
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            textArea.style.top = '-999999px';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            document.execCommand('copy');
+            textArea.remove();
+            showNotification(`${label}이(가) 복사되었습니다.`, 'success');
+        } catch (fallbackError) {
+            console.error('대체 복사 방법 오류:', fallbackError);
+            showNotification('복사에 실패했습니다.', 'error');
+        }
+    }
 }
 
 // ==================== 코트 관리 ====================
@@ -2509,6 +2635,131 @@ async function refreshData() {
     } catch (error) {
         console.error('데이터 새로고침 오류:', error);
         showNotification('데이터 새로고침 중 오류가 발생했습니다.', 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
+// 회원 일괄 업데이트 함수
+async function batchUpdateMembers() {
+    const memberData = [
+        { nickname: '거북코', name: '김구', phone: '01053924417' },
+        { nickname: '참치', name: '김태호', phone: '01046075604' },
+        { nickname: '청새치', name: '진형국', phone: '01093126776' },
+        { nickname: '고래', name: '조경민', phone: '01025271478' },
+        { nickname: '곰치', name: '윤원섭', phone: '01088608287' },
+        { nickname: '광어', name: '정광문', phone: '01026303841' },
+        { nickname: '나르는날치', name: '양진민', phone: '01059200472' },
+        { nickname: '다랑어', name: '최원준', phone: '01027557737' },
+        { nickname: '대방어', name: '송지영', phone: '01090120611' },
+        { nickname: '도리', name: '유영훈', phone: '01055714707' },
+        { nickname: '돌핀', name: '추민정', phone: '01091540825' },
+        { nickname: '랍스터', name: '이미랑', phone: '01074840275' },
+        { nickname: '멍게', name: 'Lim Eunsook Grace', phone: '01097265235' },
+        { nickname: '베타', name: '주은희', phone: '01050205424' },
+        { nickname: '수달', name: '양수종', phone: '01053647906' },
+        { nickname: '벨루가', name: '신인섭', phone: '01038513662' },
+        { nickname: '아기상어', name: '이성식', phone: '01024365516' },
+        { nickname: '용왕', name: '김정순', phone: '01056293686' },
+        { nickname: '우럭', name: '조강타', phone: '01033568759' },
+        { nickname: '연어', name: '이주한', phone: '01092174446' },
+        { nickname: '자갈치', name: '이병근', phone: '01048173081' },
+        { nickname: '쭈꾸미', name: '장유진', phone: '01054601778' },
+        { nickname: '초록물고기', name: '안초록', phone: '01096328522' },
+        { nickname: '해마', name: '김용희', phone: '01073651682' },
+        { nickname: '꼬막', name: '민충기', phone: '01075598904' }
+    ];
+
+    try {
+        showLoading(true);
+        let updatedCount = 0;
+        let createdCount = 0;
+        let errorCount = 0;
+
+        // 모든 회원 데이터 로드
+        const { data: allMembers, error: loadError } = await supabase
+            .from('aq_members')
+            .select('*');
+
+        if (loadError) throw loadError;
+
+        for (const memberInfo of memberData) {
+            try {
+                // 닉네임(name 필드)으로 회원 찾기
+                const existingMember = allMembers.find(m => m.name === memberInfo.nickname);
+
+                if (existingMember) {
+                    // 기존 회원 업데이트
+                    const { error: updateError } = await supabase
+                        .from('aq_members')
+                        .update({
+                            emergency_contact_name: memberInfo.name,
+                            emergency_contact_phone: memberInfo.phone
+                        })
+                        .eq('id', existingMember.id);
+
+                    if (updateError) {
+                        console.error(`${memberInfo.nickname} 업데이트 오류:`, updateError);
+                        errorCount++;
+                    } else {
+                        updatedCount++;
+                        console.log(`${memberInfo.nickname} 업데이트 완료`);
+                    }
+                } else {
+                    // 신규 회원 추가
+                    const memberCode = await generateMemberCode();
+                    const { error: insertError } = await supabase
+                        .from('aq_members')
+                        .insert([{
+                            member_code: memberCode,
+                            name: memberInfo.nickname,
+                            reservation_group: 'N/A',
+                            court_number: 'N/A',
+                            birth_date: null,
+                            gender: null,
+                            address: null,
+                            membership_type: 'regular',
+                            membership_start_date: new Date().toISOString().split('T')[0],
+                            membership_end_date: null,
+                            skill_level: 'beginner',
+                            emergency_contact_name: memberInfo.name,
+                            emergency_contact_phone: memberInfo.phone,
+                            notes: null,
+                            is_active: true
+                        }]);
+
+                    if (insertError) {
+                        console.error(`${memberInfo.nickname} 추가 오류:`, insertError);
+                        errorCount++;
+                    } else {
+                        createdCount++;
+                        console.log(`${memberInfo.nickname} 추가 완료 (회원번호: ${memberCode})`);
+                        // 새로 추가된 회원을 allMembers에 추가하여 다음 회원번호 생성에 반영
+                        allMembers.push({
+                            id: 'temp',
+                            member_code: memberCode,
+                            name: memberInfo.nickname
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error(`${memberInfo.nickname} 처리 오류:`, error);
+                errorCount++;
+            }
+        }
+
+        // 결과 표시
+        const message = `일괄 업데이트 완료!\n업데이트: ${updatedCount}명\n신규 추가: ${createdCount}명\n오류: ${errorCount}명`;
+        showNotification(message, 'success');
+        console.log(message);
+
+        // 데이터 새로고침
+        await loadAllData();
+        renderMembersTable();
+
+    } catch (error) {
+        console.error('일괄 업데이트 오류:', error);
+        showNotification('일괄 업데이트 중 오류가 발생했습니다.', 'error');
     } finally {
         showLoading(false);
     }

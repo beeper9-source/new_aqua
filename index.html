@@ -45,9 +45,14 @@
             <section id="members" class="tab-content">
                 <div class="section-header">
                     <h2>회원 관리</h2>
-                    <button class="btn btn-primary" onclick="openMemberModal()">
-                        <i class="fas fa-plus"></i> 새 회원 추가
-                    </button>
+                    <div class="header-buttons">
+                        <button class="btn btn-primary" onclick="openMemberModal()">
+                            <i class="fas fa-plus"></i> 새 회원 추가
+                        </button>
+                        <button class="btn btn-secondary" onclick="batchUpdateMembers()" style="margin-left: 10px; display: none;">
+                            <i class="fas fa-sync"></i> 회원 일괄 업데이트
+                        </button>
+                    </div>
                 </div>
                 <div class="search-bar">
                     <input type="text" id="memberSearch" placeholder="예약조, 코트번호, 회원명으로 검색...">
@@ -61,10 +66,9 @@
                             <tr>
                                 <th>예약조</th>
                                 <th>코트번호</th>
-                                <th>회원번호</th>
+                                <th>닉네임</th>
                                 <th>이름</th>
-                                <th>멤버십</th>
-                                <th>기술수준</th>
+                                <th>핸드폰번호</th>
                                 <th>상태</th>
                                 <th>작업</th>
                             </tr>
@@ -250,7 +254,7 @@
                     <input type="text" id="memberCode" readonly>
                 </div>
                 <div class="form-group">
-                    <label for="memberName">이름:</label>
+                    <label for="memberName">닉네임:</label>
                     <input type="text" id="memberName" required>
                 </div>
                 <div class="form-group">
@@ -278,56 +282,19 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="memberBirthDate">생년월일:</label>
-                    <input type="date" id="memberBirthDate">
-                </div>
-                <div class="form-group">
-                    <label for="memberGender">성별:</label>
-                    <select id="memberGender">
-                        <option value="">선택하세요</option>
-                        <option value="male">남성</option>
-                        <option value="female">여성</option>
-                        <option value="other">기타</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="memberAddress">주소:</label>
-                    <textarea id="memberAddress"></textarea>
-                </div>
-                <div class="form-group">
-                    <label for="membershipType">멤버십 타입:</label>
-                    <select id="membershipType" required>
-                        <option value="regular">일반</option>
-                        <option value="premium">프리미엄</option>
-                        <option value="vip">VIP</option>
-                        <option value="student">학생</option>
-                        <option value="senior">시니어</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="membershipStartDate">멤버십 시작일:</label>
-                    <input type="date" id="membershipStartDate" required>
-                </div>
-                <div class="form-group">
-                    <label for="membershipEndDate">멤버십 종료일:</label>
-                    <input type="date" id="membershipEndDate">
-                </div>
-                <div class="form-group">
-                    <label for="skillLevel">기술 수준:</label>
-                    <select id="skillLevel">
-                        <option value="beginner">초급</option>
-                        <option value="intermediate">중급</option>
-                        <option value="advanced">고급</option>
-                        <option value="professional">프로</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="emergencyContactName">비상연락처 이름:</label>
+                    <label for="emergencyContactName">이름:</label>
                     <input type="text" id="emergencyContactName">
                 </div>
                 <div class="form-group">
-                    <label for="emergencyContactPhone">비상연락처 전화번호:</label>
+                    <label for="emergencyContactPhone">핸드폰번호:</label>
                     <input type="tel" id="emergencyContactPhone">
+                </div>
+                <div class="form-group">
+                    <label for="memberStatus">상태:</label>
+                    <select id="memberStatus">
+                        <option value="true">활성</option>
+                        <option value="false">비활성</option>
+                    </select>
                 </div>
                 <div class="form-group">
                     <label for="memberNotes">메모:</label>

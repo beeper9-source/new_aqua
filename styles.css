@@ -262,6 +262,47 @@ body {
     background-color: #f8f9fa;
 }
 
+/* 주차별 하일라이트 */
+.data-table tbody tr.week-1 {
+    background-color: #e3f2fd;
+}
+
+.data-table tbody tr.week-1:hover {
+    background-color: #bbdefb;
+}
+
+.data-table tbody tr.week-2 {
+    background-color: #f3e5f5;
+}
+
+.data-table tbody tr.week-2:hover {
+    background-color: #e1bee7;
+}
+
+.data-table tbody tr.week-3 {
+    background-color: #fff3e0;
+}
+
+.data-table tbody tr.week-3:hover {
+    background-color: #ffe0b2;
+}
+
+.data-table tbody tr.week-4 {
+    background-color: #e8f5e9;
+}
+
+.data-table tbody tr.week-4:hover {
+    background-color: #c8e6c9;
+}
+
+.data-table tbody tr.week-na {
+    background-color: #fafafa;
+}
+
+.data-table tbody tr.week-na:hover {
+    background-color: #f5f5f5;
+}
+
 .data-table tbody tr:last-child td {
     border-bottom: none;
 }
