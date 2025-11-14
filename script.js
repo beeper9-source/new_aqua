@@ -450,27 +450,26 @@ function renderMembersTable() {
             <td>${member.court_number || '-'}</td>
             <td>${member.name}</td>
             <td>
-                ${contactName}
                 <button class="btn btn-xs btn-info copy-name-btn" 
                         data-text="${contactName.replace(/"/g, '&quot;')}" 
-                        title="이름 복사" style="margin-left: 5px; padding: 2px 6px;">
+                        title="이름 복사" style="margin-right: 5px; padding: 2px 6px;">
                     <i class="fas fa-copy"></i>
                 </button>
+                ${contactName}
             </td>
             <td>
-                ${contactPhone}
                 <button class="btn btn-xs btn-info copy-phone-btn" 
                         data-text="${contactPhone.replace(/"/g, '&quot;')}" 
-                        title="핸드폰번호 복사" style="margin-left: 5px; padding: 2px 6px;">
+                        title="핸드폰번호 복사" style="margin-right: 5px; padding: 2px 6px;">
                     <i class="fas fa-copy"></i>
                 </button>
+                ${contactPhone}
             </td>
-            <td><span class="status-badge ${member.is_active ? 'status-active' : 'status-inactive'}">${member.is_active ? '활성' : '비활성'}</span></td>
             <td>
-                <button class="btn btn-sm btn-warning" onclick="editMember('${member.id}')">
+                <button class="btn btn-sm btn-warning" onclick="editMember('${member.id}')" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;">
                     <i class="fas fa-edit"></i> 수정
                 </button>
-                <button class="btn btn-sm btn-danger" onclick="deleteMember('${member.id}')">
+                <button class="btn btn-sm btn-danger" onclick="deleteMember('${member.id}')" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;">
                     <i class="fas fa-trash"></i> 삭제
                 </button>
             </td>
@@ -686,27 +685,26 @@ function searchMembers() {
             <td>${member.court_number || '-'}</td>
             <td>${member.name}</td>
             <td>
-                ${contactName}
                 <button class="btn btn-xs btn-info copy-name-btn" 
                         data-text="${contactName.replace(/"/g, '&quot;')}" 
-                        title="이름 복사" style="margin-left: 5px; padding: 2px 6px;">
+                        title="이름 복사" style="margin-right: 5px; padding: 2px 6px;">
                     <i class="fas fa-copy"></i>
                 </button>
+                ${contactName}
             </td>
             <td>
-                ${contactPhone}
                 <button class="btn btn-xs btn-info copy-phone-btn" 
                         data-text="${contactPhone.replace(/"/g, '&quot;')}" 
-                        title="핸드폰번호 복사" style="margin-left: 5px; padding: 2px 6px;">
+                        title="핸드폰번호 복사" style="margin-right: 5px; padding: 2px 6px;">
                     <i class="fas fa-copy"></i>
                 </button>
+                ${contactPhone}
             </td>
-            <td><span class="status-badge ${member.is_active ? 'status-active' : 'status-inactive'}">${member.is_active ? '활성' : '비활성'}</span></td>
             <td>
-                <button class="btn btn-sm btn-warning" onclick="editMember('${member.id}')">
+                <button class="btn btn-sm btn-warning" onclick="editMember('${member.id}')" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;">
                     <i class="fas fa-edit"></i> 수정
                 </button>
-                <button class="btn btn-sm btn-danger" onclick="deleteMember('${member.id}')">
+                <button class="btn btn-sm btn-danger" onclick="deleteMember('${member.id}')" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;">
                     <i class="fas fa-trash"></i> 삭제
                 </button>
             </td>

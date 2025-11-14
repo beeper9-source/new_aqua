@@ -242,10 +242,14 @@ body {
     font-size: 0.9rem;
 }
 
+#membersTable {
+    table-layout: fixed;
+}
+
 .data-table th {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
-    padding: 1rem;
+    padding: 0.5rem 0.75rem;
     text-align: left;
     font-weight: 600;
     text-transform: uppercase;
@@ -253,9 +257,52 @@ body {
 }
 
 .data-table td {
-    padding: 1rem;
+    padding: 0.5rem 0.75rem;
     border-bottom: 1px solid #e1e8ed;
     vertical-align: middle;
+}
+
+/* 회원 테이블 컬럼 폭 조정 */
+#membersTable th:nth-child(1),
+#membersTable td:nth-child(1) {
+    width: 60px;
+    min-width: 60px;
+    max-width: 60px;
+    padding: 0.5rem 0.4rem;
+    text-align: center;
+}
+
+#membersTable th:nth-child(2),
+#membersTable td:nth-child(2) {
+    width: 70px;
+    min-width: 70px;
+    max-width: 70px;
+    padding: 0.5rem 0.4rem;
+    text-align: center;
+}
+
+#membersTable th:nth-child(3),
+#membersTable td:nth-child(3) {
+    width: 100px;
+    min-width: 100px;
+}
+
+#membersTable th:nth-child(4),
+#membersTable td:nth-child(4) {
+    width: 120px;
+    min-width: 120px;
+}
+
+#membersTable th:nth-child(5),
+#membersTable td:nth-child(5) {
+    width: 140px;
+    min-width: 140px;
+}
+
+#membersTable th:nth-child(6),
+#membersTable td:nth-child(6) {
+    width: 120px;
+    min-width: 120px;
 }
 
 .data-table tbody tr:hover {
