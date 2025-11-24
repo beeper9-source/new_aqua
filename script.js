@@ -432,7 +432,7 @@ function showNotification(message, type = 'info') {
 }
 
 // 예약조 변경 시 코트번호 옵션 업데이트
-function updateCourtNumberOptions() {
+function updateCourtNumberOptions(preselectValue = null) {
     const reservationGroup = document.getElementById('reservationGroup').value;
     const courtNumberSelect = document.getElementById('courtNumber');
     
@@ -446,8 +446,12 @@ function updateCourtNumberOptions() {
         option.textContent = 'N/A';
         courtNumberSelect.appendChild(option);
         
-        // 자동으로 N/A 선택
-        courtNumberSelect.value = 'N/A';
+        // preselectValue가 있으면 해당 값 선택, 없으면 N/A 자동 선택
+        if (preselectValue) {
+            courtNumberSelect.value = preselectValue;
+        } else {
+            courtNumberSelect.value = 'N/A';
+        }
     } else {
         // 예약조가 정상이면 모든 코트번호 선택 가능
         const courtOptions = [
@@ -464,8 +468,32 @@ function updateCourtNumberOptions() {
             const option = document.createElement('option');
             option.value = court.value;
             option.textContent = court.text;
+            // preselectValue와 일치하면 selected 속성 추가
+            if (preselectValue && String(court.value) === String(preselectValue)) {
+                option.selected = true;
+            }
             courtNumberSelect.appendChild(option);
         });
+        
+        // preselectValue가 있으면 해당 값 선택 (이중 확인)
+        if (preselectValue) {
+            // 문자열로 변환하여 비교 (타입 불일치 방지)
+            const selectValue = String(preselectValue);
+            courtNumberSelect.value = selectValue;
+            
+            // 값이 설정되지 않았으면 다시 시도
+            if (courtNumberSelect.value !== selectValue) {
+                // 옵션을 다시 찾아서 선택
+                const targetOption = Array.from(courtNumberSelect.options).find(opt => String(opt.value) === selectValue);
+                if (targetOption) {
+                    targetOption.selected = true;
+                    courtNumberSelect.value = selectValue;
+                }
+            }
+            
+            // 최종 확인
+            console.log(`코트번호 설정 시도: preselectValue=${preselectValue}, 최종값=${courtNumberSelect.value}`);
+        }
     }
 }
 async function generateMemberCode() {
@@ -640,11 +668,24 @@ function fillMemberForm(member) {
     document.getElementById('memberName').value = member.name;
     document.getElementById('reservationGroup').value = member.reservation_group;
     
-    // 예약조에 따라 코트번호 옵션 업데이트
-    updateCourtNumberOptions();
+    // 예약조에 따라 코트번호 옵션 업데이트 (코트번호 값 전달)
+    // court_number가 null이거나 빈 문자열이 아닐 때만 전달
+    const courtNumber = member.court_number && member.court_number.trim() !== '' ? member.court_number : null;
     
-    // 코트번호 설정 (옵션 업데이트 후)
-    document.getElementById('courtNumber').value = member.court_number || '';
+    // DOM 업데이트가 완료된 후 코트번호 옵션 업데이트
+    // requestAnimationFrame을 사용하여 다음 프레임에서 실행
+    requestAnimationFrame(() => {
+        updateCourtNumberOptions(courtNumber);
+        // 추가로 한 번 더 확인 (타이밍 문제 방지)
+        if (courtNumber) {
+            setTimeout(() => {
+                const courtNumberSelect = document.getElementById('courtNumber');
+                if (courtNumberSelect.value !== courtNumber) {
+                    courtNumberSelect.value = courtNumber;
+                }
+            }, 10);
+        }
+    });
     
     document.getElementById('memberEmail').value = member.email || '';
     document.getElementById('emergencyContactName').value = member.emergency_contact_name || '';
