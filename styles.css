@@ -419,6 +419,16 @@ body {
     background-color: #ffffff;
 }
 
+.date-special {
+    background-color: #ffebee;
+    border-left: 4px solid #f44336;
+    font-weight: 500;
+}
+
+.date-special:hover {
+    background-color: #ffcdd2;
+}
+
 /* 헤더 버튼 그룹 */
 .header-buttons {
     display: flex;

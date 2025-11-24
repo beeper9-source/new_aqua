@@ -1261,23 +1261,28 @@ function renderReservationsTable() {
         const row = document.createElement('tr');
         const gameDateWithDay = reservation.game_date ? `${reservation.game_date} (${getDayOfWeek(reservation.game_date)})` : '-';
         
-        // 예약일에 따른 배경색 클래스 추가
-        const reservationDate = new Date(reservation.reservation_date);
-        const today = new Date();
-        const diffTime = reservationDate - today;
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        
+        // 특별 날짜(대회일) 체크 - game_date 기준
         let dateClass = '';
-        if (diffDays < 0) {
-            dateClass = 'date-past'; // 과거
-        } else if (diffDays === 0) {
-            dateClass = 'date-today'; // 오늘
-        } else if (diffDays === 1) {
-            dateClass = 'date-tomorrow'; // 내일
-        } else if (diffDays <= 7) {
-            dateClass = 'date-week'; // 이번 주
+        if (isSpecialDate(reservation.game_date)) {
+            dateClass = 'date-special'; // 특별 날짜 (대회일)
         } else {
-            dateClass = 'date-future'; // 미래
+            // 예약일에 따른 배경색 클래스 추가
+            const reservationDate = new Date(reservation.reservation_date);
+            const today = new Date();
+            const diffTime = reservationDate - today;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            
+            if (diffDays < 0) {
+                dateClass = 'date-past'; // 과거
+            } else if (diffDays === 0) {
+                dateClass = 'date-today'; // 오늘
+            } else if (diffDays === 1) {
+                dateClass = 'date-tomorrow'; // 내일
+            } else if (diffDays <= 7) {
+                dateClass = 'date-week'; // 이번 주
+            } else {
+                dateClass = 'date-future'; // 미래
+            }
         }
         
         row.className = dateClass;
@@ -1343,6 +1348,13 @@ function calculateEndTime(startTime) {
     
     return `${endHours.toString().padStart(2, '0')}:${endMins.toString().padStart(2, '0')}`;
 }
+// 특별 날짜 체크 함수 (수내코트 대회일)
+function isSpecialDate(dateStr) {
+    if (!dateStr) return false;
+    const specialDates = ['2025-12-06', '2025-12-07'];
+    return specialDates.includes(dateStr);
+}
+
 function updateGameDate() {
     const reservationDate = document.getElementById('reservationDate').value;
     if (reservationDate) {
@@ -1352,6 +1364,11 @@ function updateGameDate() {
         
         const gameDate = gameDateObj.toISOString().split('T')[0];
         document.getElementById('gameDate').value = gameDate;
+        
+        // 특별 날짜인 경우 시간을 06:00으로 설정
+        if (isSpecialDate(gameDate)) {
+            document.getElementById('startTime').value = '06:00';
+        }
     } else {
         document.getElementById('gameDate').value = '';
     }
@@ -1426,9 +1443,6 @@ async function openReservationModal(reservationId = null) {
         tomorrow.setDate(tomorrow.getDate() + 1);
         document.getElementById('reservationDate').value = tomorrow.toISOString().split('T')[0];
         
-        // 시간 디폴트를 8시로 설정
-        document.getElementById('startTime').value = '08:00';
-        
         // 상태 디폴트를 예약전으로 설정
         document.getElementById('reservationStatus').value = 'pending';
         
@@ -1437,8 +1451,14 @@ async function openReservationModal(reservationId = null) {
         reservationDateInput.removeEventListener('change', updateGameDate);
         reservationDateInput.addEventListener('change', updateGameDate);
         
-        // 초기 경기일 설정
+        // 초기 경기일 설정 (특별 날짜 체크 포함)
         updateGameDate();
+        
+        // 특별 날짜가 아니면 시간 디폴트를 8시로 설정
+        const gameDate = document.getElementById('gameDate').value;
+        if (!isSpecialDate(gameDate)) {
+            document.getElementById('startTime').value = '08:00';
+        }
     }
     
     modal.style.display = 'block';
@@ -1678,23 +1698,28 @@ function filterReservations() {
         const row = document.createElement('tr');
         const gameDateWithDay = reservation.game_date ? `${reservation.game_date} (${getDayOfWeek(reservation.game_date)})` : '-';
         
-        // 예약일에 따른 배경색 클래스 추가
-        const reservationDate = new Date(reservation.reservation_date);
-        const today = new Date();
-        const diffTime = reservationDate - today;
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        
+        // 특별 날짜(대회일) 체크 - game_date 기준
         let dateClass = '';
-        if (diffDays < 0) {
-            dateClass = 'date-past'; // 과거
-        } else if (diffDays === 0) {
-            dateClass = 'date-today'; // 오늘
-        } else if (diffDays === 1) {
-            dateClass = 'date-tomorrow'; // 내일
-        } else if (diffDays <= 7) {
-            dateClass = 'date-week'; // 이번 주
+        if (isSpecialDate(reservation.game_date)) {
+            dateClass = 'date-special'; // 특별 날짜 (대회일)
         } else {
-            dateClass = 'date-future'; // 미래
+            // 예약일에 따른 배경색 클래스 추가
+            const reservationDate = new Date(reservation.reservation_date);
+            const today = new Date();
+            const diffTime = reservationDate - today;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            
+            if (diffDays < 0) {
+                dateClass = 'date-past'; // 과거
+            } else if (diffDays === 0) {
+                dateClass = 'date-today'; // 오늘
+            } else if (diffDays === 1) {
+                dateClass = 'date-tomorrow'; // 내일
+            } else if (diffDays <= 7) {
+                dateClass = 'date-week'; // 이번 주
+            } else {
+                dateClass = 'date-future'; // 미래
+            }
         }
         
         row.className = dateClass;
