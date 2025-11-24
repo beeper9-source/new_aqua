@@ -570,6 +570,14 @@ function renderMembersTable() {
         }
         
         row.innerHTML = `
+            <td>
+                <button class="btn btn-sm btn-warning" onclick="editMember('${member.id}')" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;">
+                    <i class="fas fa-edit"></i> 수정
+                </button>
+                <button class="btn btn-sm btn-danger" onclick="deleteMember('${member.id}')" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;">
+                    <i class="fas fa-trash"></i> 삭제
+                </button>
+            </td>
             <td>${member.reservation_group}</td>
             <td>${member.court_number || '-'}</td>
             <td>${member.name}</td>
@@ -588,14 +596,6 @@ function renderMembersTable() {
                     <i class="fas fa-copy"></i>
                 </button>
                 ${contactPhone}
-            </td>
-            <td>
-                <button class="btn btn-sm btn-warning" onclick="editMember('${member.id}')" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;">
-                    <i class="fas fa-edit"></i> 수정
-                </button>
-                <button class="btn btn-sm btn-danger" onclick="deleteMember('${member.id}')" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;">
-                    <i class="fas fa-trash"></i> 삭제
-                </button>
             </td>
         `;
         // 이름 복사 버튼에 이벤트 리스너 추가
@@ -765,6 +765,19 @@ function editMember(memberId) {
 async function deleteMember(memberId) {
     if (!confirm('정말로 이 회원을 삭제하시겠습니까?')) return;
     
+    // 비밀번호 확인
+    const password = prompt('회원 삭제를 위해 비밀번호를 입력하세요:');
+    
+    if (password === null) {
+        // 취소 버튼을 누른 경우
+        return;
+    }
+    
+    if (password !== '22331') {
+        showNotification('비밀번호가 일치하지 않습니다. 삭제가 취소되었습니다.', 'error');
+        return;
+    }
+    
     try {
         showLoading(true);
         
@@ -820,6 +833,14 @@ function searchMembers() {
         }
         
         row.innerHTML = `
+            <td>
+                <button class="btn btn-sm btn-warning" onclick="editMember('${member.id}')" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;">
+                    <i class="fas fa-edit"></i> 수정
+                </button>
+                <button class="btn btn-sm btn-danger" onclick="deleteMember('${member.id}')" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;">
+                    <i class="fas fa-trash"></i> 삭제
+                </button>
+            </td>
             <td>${member.reservation_group}</td>
             <td>${member.court_number || '-'}</td>
             <td>${member.name}</td>
@@ -838,14 +859,6 @@ function searchMembers() {
                     <i class="fas fa-copy"></i>
                 </button>
                 ${contactPhone}
-            </td>
-            <td>
-                <button class="btn btn-sm btn-warning" onclick="editMember('${member.id}')" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;">
-                    <i class="fas fa-edit"></i> 수정
-                </button>
-                <button class="btn btn-sm btn-danger" onclick="deleteMember('${member.id}')" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;">
-                    <i class="fas fa-trash"></i> 삭제
-                </button>
             </td>
         `;
         // 이름 복사 버튼에 이벤트 리스너 추가
