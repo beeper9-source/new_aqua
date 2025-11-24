@@ -236,6 +236,14 @@ body {
     overflow: hidden;
 }
 
+/* 모바일에서 테이블 스크롤 가능하도록 */
+@media (max-width: 768px) {
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
 .data-table {
     width: 100%;
     border-collapse: collapse;
@@ -244,6 +252,14 @@ body {
 
 #membersTable {
     table-layout: fixed;
+}
+
+/* 모바일에서 테이블 레이아웃 자동 조정 */
+@media (max-width: 768px) {
+    #membersTable {
+        table-layout: auto;
+        min-width: 600px;
+    }
 }
 
 .data-table th {
@@ -263,8 +279,19 @@ body {
 }
 
 /* 회원 테이블 컬럼 폭 조정 */
+/* 작업 컬럼 (첫 번째) */
 #membersTable th:nth-child(1),
 #membersTable td:nth-child(1) {
+    width: 140px;
+    min-width: 140px;
+    max-width: 140px;
+    padding: 0.5rem 0.4rem;
+    text-align: center;
+}
+
+/* 예약조 컬럼 (두 번째) */
+#membersTable th:nth-child(2),
+#membersTable td:nth-child(2) {
     width: 60px;
     min-width: 60px;
     max-width: 60px;
@@ -272,8 +299,9 @@ body {
     text-align: center;
 }
 
-#membersTable th:nth-child(2),
-#membersTable td:nth-child(2) {
+/* 코트번호 컬럼 (세 번째) */
+#membersTable th:nth-child(3),
+#membersTable td:nth-child(3) {
     width: 70px;
     min-width: 70px;
     max-width: 70px;
@@ -281,28 +309,25 @@ body {
     text-align: center;
 }
 
-#membersTable th:nth-child(3),
-#membersTable td:nth-child(3) {
+/* 닉네임 컬럼 (네 번째) */
+#membersTable th:nth-child(4),
+#membersTable td:nth-child(4) {
     width: 100px;
     min-width: 100px;
 }
 
-#membersTable th:nth-child(4),
-#membersTable td:nth-child(4) {
-    width: 120px;
-    min-width: 120px;
-}
-
+/* 이름 컬럼 (다섯 번째) */
 #membersTable th:nth-child(5),
 #membersTable td:nth-child(5) {
-    width: 140px;
-    min-width: 140px;
-}
-
-#membersTable th:nth-child(6),
-#membersTable td:nth-child(6) {
     width: 120px;
     min-width: 120px;
+}
+
+/* 핸드폰번호 컬럼 (여섯 번째) */
+#membersTable th:nth-child(6),
+#membersTable td:nth-child(6) {
+    width: 140px;
+    min-width: 140px;
 }
 
 .data-table tbody tr:hover {
@@ -732,15 +757,68 @@ form {
     
     .data-table {
         font-size: 0.75rem;
-        display: block;
+        display: table;
+        width: 100%;
+        table-layout: auto;
+    }
+    
+    .table-container {
         overflow-x: auto;
-        white-space: nowrap;
+        -webkit-overflow-scrolling: touch;
     }
     
     .data-table th,
     .data-table td {
         padding: 0.4rem 0.3rem;
         min-width: 80px;
+    }
+    
+    /* 회원 테이블 컨테이너 스크롤 설정 */
+    #membersTable {
+        min-width: 600px;
+        table-layout: auto;
+    }
+    
+    /* 회원 테이블 첫 번째 컬럼 (작업) - 모바일에서 고정 */
+    #membersTable th:first-child,
+    #membersTable td:first-child {
+        min-width: 120px;
+        max-width: 120px;
+        width: 120px;
+        position: sticky;
+        left: 0;
+        background: white;
+        z-index: 10;
+        box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+    }
+    
+    #membersTable thead th:first-child {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        z-index: 11;
+    }
+    
+    #membersTable tbody tr.week-1 td:first-child {
+        background-color: #e3f2fd !important;
+    }
+    
+    #membersTable tbody tr.week-2 td:first-child {
+        background-color: #f3e5f5 !important;
+    }
+    
+    #membersTable tbody tr.week-3 td:first-child {
+        background-color: #fff3e0 !important;
+    }
+    
+    #membersTable tbody tr.week-4 td:first-child {
+        background-color: #e8f5e9 !important;
+    }
+    
+    #membersTable tbody tr.week-na td:first-child {
+        background-color: #fafafa !important;
+    }
+    
+    #membersTable tbody tr:hover td:first-child {
+        background-color: #f8f9fa !important;
     }
     
     .data-table th:first-child,
@@ -795,12 +873,63 @@ form {
     
     .data-table {
         font-size: 0.7rem;
+        display: table;
+        width: 100%;
+        table-layout: auto;
     }
     
     .data-table th,
     .data-table td {
         padding: 0.3rem 0.2rem;
         min-width: 70px;
+    }
+    
+    /* 회원 테이블 컨테이너 스크롤 설정 */
+    #membersTable {
+        min-width: 500px;
+        table-layout: auto;
+    }
+    
+    /* 회원 테이블 첫 번째 컬럼 (작업) - 작은 모바일에서 고정 */
+    #membersTable th:first-child,
+    #membersTable td:first-child {
+        min-width: 100px;
+        max-width: 100px;
+        width: 100px;
+        position: sticky;
+        left: 0;
+        background: white;
+        z-index: 10;
+        box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+    }
+    
+    #membersTable thead th:first-child {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        z-index: 11;
+    }
+    
+    #membersTable tbody tr.week-1 td:first-child {
+        background-color: #e3f2fd !important;
+    }
+    
+    #membersTable tbody tr.week-2 td:first-child {
+        background-color: #f3e5f5 !important;
+    }
+    
+    #membersTable tbody tr.week-3 td:first-child {
+        background-color: #fff3e0 !important;
+    }
+    
+    #membersTable tbody tr.week-4 td:first-child {
+        background-color: #e8f5e9 !important;
+    }
+    
+    #membersTable tbody tr.week-na td:first-child {
+        background-color: #fafafa !important;
+    }
+    
+    #membersTable tbody tr:hover td:first-child {
+        background-color: #f8f9fa !important;
     }
     
     .data-table th:first-child,
