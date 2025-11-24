@@ -23,6 +23,9 @@
                     <button class="nav-tab active" data-tab="reservations">
                         <i class="fas fa-calendar-alt"></i> 예약관리
                     </button>
+                    <button class="nav-tab" data-tab="court-assignments">
+                        <i class="fas fa-user-check"></i> 코트배정
+                    </button>
                     <button class="nav-tab" data-tab="members">
                         <i class="fas fa-users"></i> 회원관리
                     </button>
@@ -154,6 +157,42 @@
                 </div>
             </section>
 
+            <!-- 코트배정 섹션 -->
+            <section id="court-assignments" class="tab-content">
+                <div class="section-header">
+                    <h2>코트 배정</h2>
+                    <div class="header-buttons">
+                        <button class="btn btn-primary" onclick="openCourtAssignmentModal()">
+                            <i class="fas fa-plus"></i> 배정 추가
+                        </button>
+                    </div>
+                </div>
+                <div class="filter-bar">
+                    <input type="date" id="assignmentDateFilter" onchange="filterCourtAssignments()">
+                    <select id="assignmentReservationFilter" onchange="filterCourtAssignments()">
+                        <option value="">모든 예약</option>
+                    </select>
+                </div>
+                <div class="table-container">
+                    <table class="data-table" id="courtAssignmentsTable">
+                        <thead>
+                            <tr>
+                                <th>경기일</th>
+                                <th>코트</th>
+                                <th>예약회원</th>
+                                <th>시간</th>
+                                <th>배정인원</th>
+                                <th>배정내용</th>
+                                <th>작업</th>
+                            </tr>
+                        </thead>
+                        <tbody id="courtAssignmentsTableBody">
+                            <!-- 동적으로 생성됨 -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
             <!-- 볼재고관리 섹션 -->
             <section id="balls" class="tab-content">
                 <div class="section-header">
@@ -279,6 +318,10 @@
                         <option value="6">6번</option>
                         <option value="N/A">N/A</option>
                     </select>
+                </div>
+                <div class="form-group">
+                    <label for="memberEmail">이메일:</label>
+                    <input type="email" id="memberEmail" placeholder="example@email.com">
                 </div>
                 <div class="form-group">
                     <label for="emergencyContactName">이름:</label>
@@ -452,6 +495,37 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" onclick="closeReservationModal()">취소</button>
+                    <button type="submit" class="btn btn-primary">저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 코트배정 모달 -->
+    <div id="courtAssignmentModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="courtAssignmentModalTitle">코트 배정 추가</h3>
+                <span class="close" onclick="closeCourtAssignmentModal()">&times;</span>
+            </div>
+            <form id="courtAssignmentForm" onsubmit="handleCourtAssignmentSubmit(event)">
+                <div class="form-group">
+                    <label for="assignmentReservation">예약 선택:</label>
+                    <select id="assignmentReservation" required onchange="updateAssignmentDate()">
+                        <option value="">예약을 선택하세요</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>배정 인원 (최대 5명):</label>
+                    <div id="assignmentMembersContainer">
+                        <!-- 동적으로 생성됨 -->
+                    </div>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="addAssignmentMember()" id="addMemberBtn" style="margin-top: 10px;">
+                        <i class="fas fa-plus"></i> 인원 추가
+                    </button>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeCourtAssignmentModal()">취소</button>
                     <button type="submit" class="btn btn-primary">저장</button>
                 </div>
             </form>

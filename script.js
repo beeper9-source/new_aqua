@@ -12,6 +12,7 @@ let reservations = [];
 let ballInventory = [];
 let ballUsageRecords = [];
 let tempTodayUsage = {}; // 임시 저장용: {memberId: quantity}
+let courtAssignments = []; // 코트 배정 데이터
 
 // 버전 관리
 const VERSION_KEY = 'aqua_tennis_version';
@@ -304,7 +305,8 @@ async function loadAllData() {
             loadCourts(),
             loadReservations(),
             loadBallInventory(),
-            loadBallUsageRecords()
+            loadBallUsageRecords(),
+            loadCourtAssignments()
         ]);
         
         updateSelectOptions();
@@ -376,6 +378,11 @@ async function switchTab(tabName) {
             case 'courts':
                 await loadCourts();
                 renderCourtsTable();
+                break;
+            case 'court-assignments':
+                await loadCourtAssignments();
+                await loadReservations(); // 예약 목록도 필요
+                renderCourtAssignmentsTable();
                 break;
             case 'reservations':
                 await loadReservations();
@@ -639,6 +646,7 @@ function fillMemberForm(member) {
     // 코트번호 설정 (옵션 업데이트 후)
     document.getElementById('courtNumber').value = member.court_number || '';
     
+    document.getElementById('memberEmail').value = member.email || '';
     document.getElementById('emergencyContactName').value = member.emergency_contact_name || '';
     document.getElementById('emergencyContactPhone').value = member.emergency_contact_phone || '';
     document.getElementById('memberStatus').value = member.is_active ? 'true' : 'false';
@@ -664,6 +672,7 @@ async function handleMemberSubmit(e) {
         birth_date: null,
         gender: null,
         address: null,
+        email: document.getElementById('memberEmail').value || null,
         membership_type: 'regular',
         membership_start_date: new Date().toISOString().split('T')[0],
         membership_end_date: null,
@@ -2872,6 +2881,787 @@ async function batchUpdateMembers() {
     } catch (error) {
         console.error('일괄 업데이트 오류:', error);
         showNotification('일괄 업데이트 중 오류가 발생했습니다.', 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
+// ==================== 코트 배정 관리 ====================
+
+// 코트 배정 데이터 로드
+async function loadCourtAssignments() {
+    try {
+        const { data, error } = await supabase
+            .from('aq_court_assignments')
+            .select(`
+                *,
+                aq_reservations!reservation_id(
+                    id,
+                    game_date,
+                    start_time,
+                    aq_courts!court_id(name, court_number),
+                    aq_members!member_id(name, member_code)
+                ),
+                aq_members!member_id(name, member_code)
+            `)
+            .order('assignment_date', { ascending: false })
+            .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        courtAssignments = data || [];
+        return courtAssignments;
+    } catch (error) {
+        console.error('코트 배정 데이터 로드 오류:', error);
+        throw error;
+    }
+}
+
+// 코트 배정 테이블 렌더링
+function renderCourtAssignmentsTable() {
+    const tbody = document.getElementById('courtAssignmentsTableBody');
+    tbody.innerHTML = '';
+
+    // 배정이 없는 경우 빈 메시지 표시
+    if (!courtAssignments || courtAssignments.length === 0) {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td colspan="7" style="text-align: center; padding: 20px; color: #999;">
+                배정된 예약이 없습니다. "배정 추가" 버튼을 클릭하여 배정을 추가하세요.
+            </td>
+        `;
+        tbody.appendChild(row);
+        return;
+    }
+
+    // 예약별로 그룹화
+    const assignmentsByReservation = {};
+    courtAssignments.forEach(assignment => {
+        const reservationId = assignment.reservation_id;
+        if (!assignmentsByReservation[reservationId]) {
+            assignmentsByReservation[reservationId] = [];
+        }
+        assignmentsByReservation[reservationId].push(assignment);
+    });
+
+    // 예약을 경기일 기준으로 최신순 정렬
+    const sortedReservationIds = Object.keys(assignmentsByReservation).sort((a, b) => {
+        const assignmentA = assignmentsByReservation[a][0];
+        const assignmentB = assignmentsByReservation[b][0];
+        
+        // reservation 데이터가 없는 경우 처리
+        if (!assignmentA || !assignmentB) return 0;
+        
+        const dateA = assignmentA.aq_reservations?.game_date || assignmentA.assignment_date || '';
+        const dateB = assignmentB.aq_reservations?.game_date || assignmentB.assignment_date || '';
+        
+        // 날짜가 같으면 생성일 기준으로 정렬
+        if (dateA === dateB) {
+            const createdA = new Date(assignmentA.created_at || 0);
+            const createdB = new Date(assignmentB.created_at || 0);
+            return createdB - createdA; // 최신순
+        }
+        
+        return dateB.localeCompare(dateA); // 최신순 (날짜 내림차순)
+    });
+
+    if (sortedReservationIds.length === 0) {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td colspan="7" style="text-align: center; padding: 20px; color: #999;">
+                배정된 예약이 없습니다. "배정 추가" 버튼을 클릭하여 배정을 추가하세요.
+            </td>
+        `;
+        tbody.appendChild(row);
+        return;
+    }
+
+    sortedReservationIds.forEach(reservationId => {
+        const assignments = assignmentsByReservation[reservationId];
+        const firstAssignment = assignments[0];
+        const reservation = firstAssignment.aq_reservations;
+        
+        if (!reservation) return;
+
+        const row = document.createElement('tr');
+        const assignmentDate = reservation.game_date || firstAssignment.assignment_date;
+        const assignmentDateWithDay = assignmentDate ? `${assignmentDate} (${getDayOfWeek(assignmentDate)})` : '-';
+        
+        // 배정 인원 목록 생성
+        const memberList = assignments.map(a => {
+            if (a.member_id && a.aq_members) {
+                return a.aq_members.name || '알 수 없음';
+            } else if (a.guest_name) {
+                return `${a.guest_name} (게스트)`;
+            }
+            return '알 수 없음';
+        }).join(', ');
+
+        const startTime = reservation.start_time;
+        const simpleTime = startTime ? `${parseInt(startTime.split(':')[0])}시` : '-';
+
+        row.innerHTML = `
+            <td>${assignmentDateWithDay}</td>
+            <td>${reservation.aq_courts?.name || '알 수 없는 코트'}</td>
+            <td>${reservation.aq_members?.name || '알 수 없음'}</td>
+            <td>${simpleTime}</td>
+            <td>${assignments.length}명</td>
+            <td>${memberList}</td>
+            <td>
+                <button class="btn btn-sm btn-warning" onclick="editCourtAssignment('${reservationId}')">
+                    <i class="fas fa-edit"></i> 수정
+                </button>
+                <button class="btn btn-sm btn-danger" onclick="deleteCourtAssignment('${reservationId}')">
+                    <i class="fas fa-trash"></i> 삭제
+                </button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+// 코트 배정 필터링
+function filterCourtAssignments() {
+    const dateFilter = document.getElementById('assignmentDateFilter').value;
+    const reservationFilter = document.getElementById('assignmentReservationFilter').value;
+
+    let filteredAssignments = [...courtAssignments];
+
+    if (dateFilter) {
+        filteredAssignments = filteredAssignments.filter(a => {
+            const assignmentDate = a.aq_reservations?.game_date || a.assignment_date;
+            return assignmentDate === dateFilter;
+        });
+    }
+
+    if (reservationFilter) {
+        filteredAssignments = filteredAssignments.filter(a => a.reservation_id === reservationFilter);
+    }
+
+    // 예약별로 그룹화하여 렌더링
+    const assignmentsByReservation = {};
+    filteredAssignments.forEach(assignment => {
+        const reservationId = assignment.reservation_id;
+        if (!assignmentsByReservation[reservationId]) {
+            assignmentsByReservation[reservationId] = [];
+        }
+        assignmentsByReservation[reservationId].push(assignment);
+    });
+
+    // 예약을 경기일 기준으로 최신순 정렬
+    const sortedReservationIds = Object.keys(assignmentsByReservation).sort((a, b) => {
+        const assignmentA = assignmentsByReservation[a][0];
+        const assignmentB = assignmentsByReservation[b][0];
+        
+        // reservation 데이터가 없는 경우 처리
+        if (!assignmentA || !assignmentB) return 0;
+        
+        const dateA = assignmentA.aq_reservations?.game_date || assignmentA.assignment_date || '';
+        const dateB = assignmentB.aq_reservations?.game_date || assignmentB.assignment_date || '';
+        
+        // 날짜가 같으면 생성일 기준으로 정렬
+        if (dateA === dateB) {
+            const createdA = new Date(assignmentA.created_at || 0);
+            const createdB = new Date(assignmentB.created_at || 0);
+            return createdB - createdA; // 최신순
+        }
+        
+        return dateB.localeCompare(dateA); // 최신순 (날짜 내림차순)
+    });
+
+    const tbody = document.getElementById('courtAssignmentsTableBody');
+    tbody.innerHTML = '';
+
+    if (sortedReservationIds.length === 0) {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td colspan="7" style="text-align: center; padding: 20px; color: #999;">
+                조건에 맞는 배정이 없습니다.
+            </td>
+        `;
+        tbody.appendChild(row);
+        return;
+    }
+
+    sortedReservationIds.forEach(reservationId => {
+        const assignments = assignmentsByReservation[reservationId];
+        const firstAssignment = assignments[0];
+        const reservation = firstAssignment.aq_reservations;
+        
+        if (!reservation) return;
+
+        const row = document.createElement('tr');
+        const assignmentDate = reservation.game_date || firstAssignment.assignment_date;
+        const assignmentDateWithDay = assignmentDate ? `${assignmentDate} (${getDayOfWeek(assignmentDate)})` : '-';
+        
+        const memberList = assignments.map(a => {
+            if (a.member_id && a.aq_members) {
+                return a.aq_members.name || '알 수 없음';
+            } else if (a.guest_name) {
+                return `${a.guest_name} (게스트)`;
+            }
+            return '알 수 없음';
+        }).join(', ');
+
+        const startTime = reservation.start_time;
+        const simpleTime = startTime ? `${parseInt(startTime.split(':')[0])}시` : '-';
+
+        row.innerHTML = `
+            <td>${assignmentDateWithDay}</td>
+            <td>${reservation.aq_courts?.name || '알 수 없는 코트'}</td>
+            <td>${reservation.aq_members?.name || '알 수 없음'}</td>
+            <td>${simpleTime}</td>
+            <td>${assignments.length}명</td>
+            <td>${memberList}</td>
+            <td>
+                <button class="btn btn-sm btn-warning" onclick="editCourtAssignment('${reservationId}')">
+                    <i class="fas fa-edit"></i> 수정
+                </button>
+                <button class="btn btn-sm btn-danger" onclick="deleteCourtAssignment('${reservationId}')">
+                    <i class="fas fa-trash"></i> 삭제
+                </button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+// 코트 배정 모달 열기
+async function openCourtAssignmentModal(reservationId = null) {
+    editingId = reservationId;
+    const modal = document.getElementById('courtAssignmentModal');
+    const title = document.getElementById('courtAssignmentModalTitle');
+    
+    // 성공 상태인 예약만 필터링하고 경기일 기준 최신순 정렬
+    const successReservations = reservations
+        .filter(r => r.reservation_status === 'success')
+        .sort((a, b) => {
+            const dateA = a.game_date || a.reservation_date || '';
+            const dateB = b.game_date || b.reservation_date || '';
+            
+            // 날짜가 같으면 생성일 기준으로 정렬
+            if (dateA === dateB) {
+                const createdA = new Date(a.created_at || 0);
+                const createdB = new Date(b.created_at || 0);
+                return createdB - createdA; // 최신순
+            }
+            
+            return dateB.localeCompare(dateA); // 최신순 (날짜 내림차순)
+        });
+    
+    const reservationSelect = document.getElementById('assignmentReservation');
+    reservationSelect.innerHTML = '<option value="">예약을 선택하세요</option>';
+    
+    successReservations.forEach(reservation => {
+        const option = document.createElement('option');
+        option.value = reservation.id;
+        const gameDate = reservation.game_date || reservation.reservation_date;
+        const courtName = reservation.aq_courts?.name || '알 수 없는 코트';
+        const memberName = reservation.aq_members?.name || '알 수 없음';
+        const startTime = reservation.start_time || '';
+        option.textContent = `${gameDate} ${courtName} - ${memberName} (${startTime})`;
+        reservationSelect.appendChild(option);
+    });
+
+    // 필터 셀렉트도 업데이트 (이미 정렬된 successReservations 사용)
+    const filterSelect = document.getElementById('assignmentReservationFilter');
+    filterSelect.innerHTML = '<option value="">모든 예약</option>';
+    successReservations.forEach(reservation => {
+        const option = document.createElement('option');
+        option.value = reservation.id;
+        const gameDate = reservation.game_date || reservation.reservation_date;
+        const courtName = reservation.aq_courts?.name || '알 수 없는 코트';
+        const memberName = reservation.aq_members?.name || '알 수 없음';
+        const startTime = reservation.start_time || '';
+        option.textContent = `${gameDate} ${courtName} - ${memberName} (${startTime})`;
+        filterSelect.appendChild(option);
+    });
+
+    if (reservationId) {
+        title.textContent = '코트 배정 수정';
+        reservationSelect.value = reservationId;
+        reservationSelect.disabled = true;
+        
+        // 기존 배정 로드
+        const existingAssignments = courtAssignments.filter(a => a.reservation_id === reservationId);
+        const reservation = reservations.find(r => r.id === reservationId);
+        
+        // 예약회원이 기존 배정에 포함되어 있는지 확인
+        const hasReservationMember = existingAssignments.some(a => a.member_id === reservation?.member_id);
+        
+        if (existingAssignments.length > 0) {
+            // 기존 배정이 있으면 그대로 로드
+            loadAssignmentMembers(existingAssignments);
+            
+            // 예약회원이 포함되어 있지 않으면 추가
+            if (reservation?.member_id && !hasReservationMember) {
+                addAssignmentMember(reservation.member_id);
+            }
+        } else {
+            // 기존 배정이 없으면 예약회원을 디폴트로 추가
+            if (reservation?.member_id) {
+                addAssignmentMember(reservation.member_id);
+            } else {
+                addAssignmentMember();
+            }
+        }
+    } else {
+        title.textContent = '코트 배정 추가';
+        reservationSelect.disabled = false;
+        document.getElementById('assignmentMembersContainer').innerHTML = '';
+        // 예약 선택 시 예약회원이 자동으로 추가되므로 여기서는 추가하지 않음
+    }
+    
+    modal.style.display = 'block';
+}
+
+// 배정 인원 추가
+function addAssignmentMember(defaultMemberId = null) {
+    const container = document.getElementById('assignmentMembersContainer');
+    const memberCount = container.children.length;
+    
+    if (memberCount >= 5) {
+        showNotification('최대 5명까지 배정할 수 있습니다.', 'error');
+        return;
+    }
+
+    const memberDiv = document.createElement('div');
+    memberDiv.className = 'assignment-member-item';
+    memberDiv.style.cssText = 'display: flex; gap: 10px; margin-bottom: 10px; align-items: center;';
+    
+    const memberTypeSelect = document.createElement('select');
+    memberTypeSelect.className = 'member-type-select';
+    memberTypeSelect.style.cssText = 'flex: 1; padding: 8px;';
+    memberTypeSelect.innerHTML = `
+        <option value="member">회원</option>
+        <option value="guest">게스트</option>
+    `;
+    
+    const memberSelect = document.createElement('select');
+    memberSelect.className = 'member-select';
+    memberSelect.style.cssText = 'flex: 2; padding: 8px;';
+    memberSelect.innerHTML = '<option value="">회원을 선택하세요</option>';
+    
+    // 회원을 이름 기준 가나다순으로 정렬
+    const sortedMembers = [...members].sort((a, b) => {
+        return a.name.localeCompare(b.name, 'ko');
+    });
+    
+    sortedMembers.forEach(member => {
+        const option = document.createElement('option');
+        option.value = member.id;
+        option.textContent = `${member.name} (${member.member_code})`;
+        if (defaultMemberId && member.id === defaultMemberId) {
+            option.selected = true;
+        }
+        memberSelect.appendChild(option);
+    });
+    
+    const guestNameInput = document.createElement('input');
+    guestNameInput.type = 'text';
+    guestNameInput.className = 'guest-name-input';
+    guestNameInput.placeholder = '게스트 이름';
+    guestNameInput.style.cssText = 'flex: 1; padding: 8px; display: none;';
+    
+    const guestPhoneInput = document.createElement('input');
+    guestPhoneInput.type = 'text';
+    guestPhoneInput.className = 'guest-phone-input';
+    guestPhoneInput.placeholder = '게스트 전화번호';
+    guestPhoneInput.style.cssText = 'flex: 1; padding: 8px; display: none;';
+    
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'btn btn-sm btn-danger';
+    removeBtn.innerHTML = '<i class="fas fa-times"></i>';
+    removeBtn.onclick = () => memberDiv.remove();
+    
+    memberTypeSelect.onchange = function() {
+        if (this.value === 'member') {
+            memberSelect.style.display = 'block';
+            guestNameInput.style.display = 'none';
+            guestPhoneInput.style.display = 'none';
+        } else {
+            memberSelect.style.display = 'none';
+            guestNameInput.style.display = 'block';
+            guestPhoneInput.style.display = 'block';
+        }
+    };
+    
+    memberDiv.appendChild(memberTypeSelect);
+    memberDiv.appendChild(memberSelect);
+    memberDiv.appendChild(guestNameInput);
+    memberDiv.appendChild(guestPhoneInput);
+    memberDiv.appendChild(removeBtn);
+    
+    container.appendChild(memberDiv);
+    
+    // 인원 추가 버튼 업데이트
+    updateAddMemberButton();
+}
+
+// 인원 추가 버튼 업데이트
+function updateAddMemberButton() {
+    const container = document.getElementById('assignmentMembersContainer');
+    const memberCount = container.children.length;
+    const addBtn = document.getElementById('addMemberBtn');
+    
+    if (memberCount >= 5) {
+        addBtn.disabled = true;
+        addBtn.style.opacity = '0.5';
+    } else {
+        addBtn.disabled = false;
+        addBtn.style.opacity = '1';
+    }
+}
+
+// 기존 배정 인원 로드
+function loadAssignmentMembers(assignments) {
+    const container = document.getElementById('assignmentMembersContainer');
+    container.innerHTML = '';
+    
+    assignments.forEach(assignment => {
+        const memberDiv = document.createElement('div');
+        memberDiv.className = 'assignment-member-item';
+        memberDiv.style.cssText = 'display: flex; gap: 10px; margin-bottom: 10px; align-items: center;';
+        
+        const memberTypeSelect = document.createElement('select');
+        memberTypeSelect.className = 'member-type-select';
+        memberTypeSelect.style.cssText = 'flex: 1; padding: 8px;';
+        
+        const memberSelect = document.createElement('select');
+        memberSelect.className = 'member-select';
+        memberSelect.style.cssText = 'flex: 2; padding: 8px;';
+        memberSelect.innerHTML = '<option value="">회원을 선택하세요</option>';
+        
+        // 회원을 이름 기준 가나다순으로 정렬
+        const sortedMembers = [...members].sort((a, b) => {
+            return a.name.localeCompare(b.name, 'ko');
+        });
+        
+        sortedMembers.forEach(member => {
+            const option = document.createElement('option');
+            option.value = member.id;
+            option.textContent = `${member.name} (${member.member_code})`;
+            if (assignment.member_id === member.id) {
+                option.selected = true;
+            }
+            memberSelect.appendChild(option);
+        });
+        
+        const guestNameInput = document.createElement('input');
+        guestNameInput.type = 'text';
+        guestNameInput.className = 'guest-name-input';
+        guestNameInput.placeholder = '게스트 이름';
+        guestNameInput.style.cssText = 'flex: 1; padding: 8px;';
+        if (assignment.guest_name) {
+            guestNameInput.value = assignment.guest_name;
+        }
+        
+        const guestPhoneInput = document.createElement('input');
+        guestPhoneInput.type = 'text';
+        guestPhoneInput.className = 'guest-phone-input';
+        guestPhoneInput.placeholder = '게스트 전화번호';
+        guestPhoneInput.style.cssText = 'flex: 1; padding: 8px;';
+        if (assignment.guest_phone) {
+            guestPhoneInput.value = assignment.guest_phone;
+        }
+        
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'btn btn-sm btn-danger';
+        removeBtn.innerHTML = '<i class="fas fa-times"></i>';
+        removeBtn.onclick = () => {
+            memberDiv.remove();
+            updateAddMemberButton();
+        };
+        
+        if (assignment.member_id) {
+            memberTypeSelect.innerHTML = '<option value="member" selected>회원</option><option value="guest">게스트</option>';
+            memberSelect.style.display = 'block';
+            guestNameInput.style.display = 'none';
+            guestPhoneInput.style.display = 'none';
+        } else {
+            memberTypeSelect.innerHTML = '<option value="member">회원</option><option value="guest" selected>게스트</option>';
+            memberSelect.style.display = 'none';
+            guestNameInput.style.display = 'block';
+            guestPhoneInput.style.display = 'block';
+        }
+        
+        memberTypeSelect.onchange = function() {
+            if (this.value === 'member') {
+                memberSelect.style.display = 'block';
+                guestNameInput.style.display = 'none';
+                guestPhoneInput.style.display = 'none';
+            } else {
+                memberSelect.style.display = 'none';
+                guestNameInput.style.display = 'block';
+                guestPhoneInput.style.display = 'block';
+            }
+        };
+        
+        memberDiv.appendChild(memberTypeSelect);
+        memberDiv.appendChild(memberSelect);
+        memberDiv.appendChild(guestNameInput);
+        memberDiv.appendChild(guestPhoneInput);
+        memberDiv.appendChild(removeBtn);
+        
+        container.appendChild(memberDiv);
+    });
+    
+    updateAddMemberButton();
+}
+
+// 예약 선택 시 날짜 업데이트 및 예약회원 자동 추가
+function updateAssignmentDate() {
+    const reservationId = document.getElementById('assignmentReservation').value;
+    if (!reservationId) {
+        // 예약이 선택되지 않으면 배정 인원 초기화
+        document.getElementById('assignmentMembersContainer').innerHTML = '';
+        return;
+    }
+    
+    const reservation = reservations.find(r => r.id === reservationId);
+    if (!reservation) return;
+    
+    // 기존 배정이 있는지 확인 (수정 모드)
+    const existingAssignments = courtAssignments.filter(a => a.reservation_id === reservationId);
+    
+    if (existingAssignments.length > 0) {
+        // 기존 배정이 있으면 그대로 로드
+        loadAssignmentMembers(existingAssignments);
+    } else {
+        // 새 배정 추가 시 예약회원을 디폴트로 추가
+        const container = document.getElementById('assignmentMembersContainer');
+        container.innerHTML = '';
+        
+        if (reservation.member_id) {
+            // 예약회원이 있으면 자동으로 추가
+            addAssignmentMember(reservation.member_id);
+        } else {
+            // 예약회원이 없으면 빈 인원 추가
+            addAssignmentMember();
+        }
+    }
+}
+
+// 코트 배정 폼 제출 처리
+async function handleCourtAssignmentSubmit(e) {
+    e.preventDefault();
+    
+    const reservationId = document.getElementById('assignmentReservation').value;
+    if (!reservationId) {
+        showNotification('예약을 선택해주세요.', 'error');
+        return;
+    }
+    
+    const reservation = reservations.find(r => r.id === reservationId);
+    if (!reservation) {
+        showNotification('선택한 예약을 찾을 수 없습니다.', 'error');
+        return;
+    }
+    
+    const assignmentDate = reservation.game_date || reservation.reservation_date;
+    
+    // 배정 인원 수집
+    const memberItems = document.querySelectorAll('.assignment-member-item');
+    const assignments = [];
+    
+    for (const item of memberItems) {
+        const memberType = item.querySelector('.member-type-select').value;
+        const memberSelect = item.querySelector('.member-select');
+        const guestNameInput = item.querySelector('.guest-name-input');
+        const guestPhoneInput = item.querySelector('.guest-phone-input');
+        
+        if (memberType === 'member') {
+            const memberId = memberSelect.value;
+            if (!memberId) {
+                showNotification('모든 회원을 선택해주세요.', 'error');
+                return;
+            }
+            
+            // 동일일 중복 체크
+            const existingAssignment = courtAssignments.find(a => 
+                a.member_id === memberId && 
+                (a.assignment_date === assignmentDate || a.aq_reservations?.game_date === assignmentDate) &&
+                a.reservation_id !== reservationId
+            );
+            
+            if (existingAssignment) {
+                const memberName = members.find(m => m.id === memberId)?.name || '알 수 없음';
+                showNotification(`${memberName}님은 ${assignmentDate}에 이미 배정되어 있습니다.`, 'error');
+                return;
+            }
+            
+            assignments.push({
+                reservation_id: reservationId,
+                member_id: memberId,
+                guest_name: null,
+                guest_phone: null,
+                assignment_date: assignmentDate
+            });
+        } else {
+            const guestName = guestNameInput.value.trim();
+            const guestPhone = guestPhoneInput.value.trim();
+            
+            if (!guestName) {
+                showNotification('게스트 이름을 입력해주세요.', 'error');
+                return;
+            }
+            
+            // 동일일 중복 체크 (게스트)
+            const existingAssignment = courtAssignments.find(a => 
+                a.guest_name === guestName && 
+                a.guest_phone === guestPhone &&
+                (a.assignment_date === assignmentDate || a.aq_reservations?.game_date === assignmentDate) &&
+                a.reservation_id !== reservationId
+            );
+            
+            if (existingAssignment) {
+                showNotification(`${guestName}님은 ${assignmentDate}에 이미 배정되어 있습니다.`, 'error');
+                return;
+            }
+            
+            assignments.push({
+                reservation_id: reservationId,
+                member_id: null,
+                guest_name: guestName,
+                guest_phone: guestPhone || null,
+                assignment_date: assignmentDate
+            });
+        }
+    }
+    
+    if (assignments.length === 0) {
+        showNotification('최소 1명 이상 배정해주세요.', 'error');
+        return;
+    }
+    
+    if (assignments.length > 5) {
+        showNotification('최대 5명까지 배정할 수 있습니다.', 'error');
+        return;
+    }
+    
+    try {
+        showLoading(true);
+        
+        if (editingId) {
+            // 기존 배정 삭제 후 새로 추가
+            const { error: deleteError } = await supabase
+                .from('aq_court_assignments')
+                .delete()
+                .eq('reservation_id', reservationId);
+            
+            if (deleteError) throw deleteError;
+        }
+        
+        // 새 배정 추가
+        const { data: insertedAssignments, error: insertError } = await supabase
+            .from('aq_court_assignments')
+            .insert(assignments)
+            .select('id');
+        
+        if (insertError) throw insertError;
+        
+        // 배정 완료 이메일 발송 (비동기로 실행, 실패해도 배정은 저장됨)
+        if (insertedAssignments && insertedAssignments.length > 0) {
+            sendCourtAssignmentEmails(reservationId, insertedAssignments.map(a => a.id))
+                .catch(error => {
+                    console.error('이메일 발송 실패:', error);
+                    // 이메일 발송 실패는 조용히 처리 (배정은 성공했으므로)
+                });
+        }
+        
+        showNotification('코트 배정이 성공적으로 저장되었습니다.', 'success');
+        await loadCourtAssignments();
+        renderCourtAssignmentsTable();
+        closeCourtAssignmentModal();
+        
+    } catch (error) {
+        console.error('코트 배정 저장 오류:', error);
+        showNotification('코트 배정 저장 중 오류가 발생했습니다.', 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
+// 코트 배정 모달 닫기
+function closeCourtAssignmentModal() {
+    document.getElementById('courtAssignmentModal').style.display = 'none';
+    document.getElementById('courtAssignmentForm').reset();
+    document.getElementById('assignmentMembersContainer').innerHTML = '';
+    editingId = null;
+}
+
+// 코트 배정 수정
+function editCourtAssignment(reservationId) {
+    openCourtAssignmentModal(reservationId);
+}
+
+// 코트 배정 완료 이메일 발송
+async function sendCourtAssignmentEmails(reservationId, assignmentIds) {
+    try {
+        const supabaseUrl = 'https://nqwjvrznwzmfytjlpfsk.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5xd2p2cnpud3ptZnl0amxwZnNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzNzA4NTEsImV4cCI6MjA3Mzk0Njg1MX0.R3Y2Xb9PmLr3sCLSdJov4Mgk1eAmhaCIPXEKq6u8NQI';
+        
+        const response = await fetch(`${supabaseUrl}/functions/v1/send-court-assignment-email`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${supabaseKey}`,
+                'apikey': supabaseKey
+            },
+            body: JSON.stringify({
+                reservationId: reservationId,
+                assignmentIds: assignmentIds
+            })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('이메일 발송 함수 호출 오류:', response.status, errorText);
+            return;
+        }
+
+        const data = await response.json();
+        console.log('이메일 발송 결과:', data);
+        
+        // 이메일 발송 결과 확인
+        if (data && data.results) {
+            const successCount = data.results.filter(r => r.status === 'success').length;
+            const errorCount = data.results.filter(r => r.status === 'error').length;
+            
+            if (successCount > 0) {
+                console.log(`✓ ${successCount}명에게 이메일 발송 완료`);
+            }
+            if (errorCount > 0) {
+                console.warn(`⚠ ${errorCount}명에게 이메일 발송 실패`);
+            }
+        }
+    } catch (error) {
+        console.error('이메일 발송 함수 호출 중 오류:', error);
+    }
+}
+
+// 코트 배정 삭제
+async function deleteCourtAssignment(reservationId) {
+    if (!confirm('정말로 이 코트 배정을 삭제하시겠습니까?')) return;
+    
+    try {
+        showLoading(true);
+        
+        const { error } = await supabase
+            .from('aq_court_assignments')
+            .delete()
+            .eq('reservation_id', reservationId);
+        
+        if (error) throw error;
+        
+        showNotification('코트 배정이 성공적으로 삭제되었습니다.', 'success');
+        await loadCourtAssignments();
+        renderCourtAssignmentsTable();
+        
+    } catch (error) {
+        console.error('코트 배정 삭제 오류:', error);
+        showNotification('코트 배정 삭제 중 오류가 발생했습니다.', 'error');
     } finally {
         showLoading(false);
     }
