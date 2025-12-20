@@ -1,7 +1,21 @@
 // Supabase 설정
 const supabaseUrl = 'https://nqwjvrznwzmfytjlpfsk.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5xd2p2cnpud3ptZnl0amxwZnNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzNzA4NTEsImV4cCI6MjA3Mzk0Njg1MX0.R3Y2Xb9PmLr3sCLSdJov4Mgk1eAmhaCIPXEKq6u8NQI';
-const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+// supabase 변수 초기화 (중복 선언 방지)
+(function() {
+    'use strict';
+    if (typeof window.supabaseClient === 'undefined') {
+        if (typeof window.supabase !== 'undefined' && window.supabase.createClient) {
+            window.supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+        } else {
+            console.error('Supabase 라이브러리가 로드되지 않았습니다.');
+        }
+    }
+})();
+
+// 전역 변수로 선언 (var 사용하여 재선언 가능)
+var supabase = window.supabaseClient;
 
 // 전역 변수
 let currentTab = 'members';
@@ -3686,9 +3700,7 @@ function editCourtAssignment(reservationId) {
 // 코트 배정 완료 이메일 발송
 async function sendCourtAssignmentEmails(reservationId, assignmentIds) {
     try {
-        const supabaseUrl = 'https://nqwjvrznwzmfytjlpfsk.supabase.co';
-        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5xd2p2cnpud3ptZnl0amxwZnNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzNzA4NTEsImV4cCI6MjA3Mzk0Njg1MX0.R3Y2Xb9PmLr3sCLSdJov4Mgk1eAmhaCIPXEKq6u8NQI';
-        
+        // 전역 변수 supabaseUrl과 supabaseKey 사용
         const response = await fetch(`${supabaseUrl}/functions/v1/send-court-assignment-email`, {
             method: 'POST',
             headers: {
