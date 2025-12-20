@@ -386,8 +386,10 @@ async function switchTab(tabName) {
                 break;
             case 'reservations':
                 await loadReservations();
-                // 기본 보기는 오늘 이상만 노출 (필터 미선택 시)
-                filterReservations();
+                // DOM이 준비될 때까지 대기 후 필터링
+                setTimeout(() => {
+                    filterReservations();
+                }, 100);
                 break;
             case 'balls':
                 await loadBallInventory();
@@ -1318,7 +1320,18 @@ async function setupNextWeekReservations() {
 // 예약 테이블 렌더링
 function renderReservationsTable() {
     const tbody = document.getElementById('reservationsTableBody');
+    if (!tbody) {
+        console.error('reservationsTableBody 요소를 찾을 수 없습니다.');
+        return;
+    }
+    
     tbody.innerHTML = '';
+    
+    // reservations 배열이 없거나 비어있으면 빈 테이블 표시
+    if (!reservations || reservations.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem;">예약 데이터가 없습니다.</td></tr>';
+        return;
+    }
 
     reservations.forEach(reservation => {
         const row = document.createElement('tr');
@@ -1390,7 +1403,8 @@ async function updateReservationStatus(reservationId, newStatus) {
             .eq('id', reservationId);
         if (error) throw error;
         await loadReservations();
-        renderReservationsTable();
+        // 필터링된 목록을 유지하기 위해 filterReservations 호출
+        filterReservations();
         showNotification('예약 상태가 업데이트되었습니다.', 'success');
     } catch (error) {
         console.error('예약 상태 업데이트 오류:', error);
@@ -1677,7 +1691,8 @@ async function handleReservationSubmit(e) {
         }
         
         await loadAllData();
-        renderReservationsTable();
+        // 필터링된 목록을 유지하기 위해 filterReservations 호출
+        filterReservations();
         closeReservationModal();
         
     } catch (error) {
@@ -1719,7 +1734,8 @@ async function deleteReservation(reservationId) {
         
         showNotification('예약이 성공적으로 삭제되었습니다.', 'success');
         await loadAllData();
-        renderReservationsTable();
+        // 필터링된 목록을 유지하기 위해 filterReservations 호출
+        filterReservations();
         
     } catch (error) {
         console.error('예약 삭제 오류:', error);
@@ -1731,9 +1747,21 @@ async function deleteReservation(reservationId) {
 
 // 예약 필터링
 function filterReservations() {
-    const dateFilter = document.getElementById('reservationDateFilter').value;
-    const courtFilter = document.getElementById('courtFilter').value;
-    const statusFilter = document.getElementById('statusFilter').value;
+    const tbody = document.getElementById('reservationsTableBody');
+    if (!tbody) {
+        console.error('reservationsTableBody 요소를 찾을 수 없습니다.');
+        return;
+    }
+    
+    // reservations 배열이 없거나 비어있으면 빈 테이블 표시
+    if (!reservations || reservations.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem;">예약 데이터가 없습니다.</td></tr>';
+        return;
+    }
+    
+    const dateFilter = document.getElementById('reservationDateFilter')?.value || '';
+    const courtFilter = document.getElementById('courtFilter')?.value || '';
+    const statusFilter = document.getElementById('statusFilter')?.value || '';
     
     let filteredReservations = reservations;
     
@@ -1754,8 +1782,13 @@ function filterReservations() {
         filteredReservations = filteredReservations.filter(r => r.reservation_status === statusFilter);
     }
     
-    const tbody = document.getElementById('reservationsTableBody');
     tbody.innerHTML = '';
+    
+    // 필터링된 결과가 없으면 메시지 표시
+    if (filteredReservations.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem;">조건에 맞는 예약이 없습니다.</td></tr>';
+        return;
+    }
 
     filteredReservations.forEach(reservation => {
         const row = document.createElement('tr');
@@ -2788,7 +2821,7 @@ function renderCurrentTab() {
             renderCourtsTable();
             break;
         case 'reservations':
-            renderReservationsTable();
+            filterReservations();
             break;
         case 'balls':
             renderBallInventoryTable();
