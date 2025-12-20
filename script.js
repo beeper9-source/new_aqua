@@ -264,11 +264,8 @@ function closeVersionHistoryModal() {
     document.getElementById('versionHistoryModal').style.display = 'none';
 }
 
-// 페이지 로드 시 초기화
-document.addEventListener('DOMContentLoaded', function() {
-    initializeApp();
-    
-    // 버전 폼 제출 처리
+// 페이지 로드 시 초기화 (Safari 호환성 개선)
+function setupVersionForm() {
     const versionForm = document.getElementById('versionForm');
     if (versionForm) {
         versionForm.addEventListener('submit', async function(e) {
@@ -287,7 +284,21 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
-});
+}
+
+// 페이지 로드 시 초기화
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    // 이미 로드된 경우 즉시 실행
+    setTimeout(function() {
+        initializeApp();
+        setupVersionForm();
+    }, 1);
+} else {
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeApp();
+        setupVersionForm();
+    });
+}
 
 // 앱 초기화
 async function initializeApp() {
@@ -400,10 +411,19 @@ async function switchTab(tabName) {
                 break;
             case 'reservations':
                 await loadReservations();
-                // DOM이 준비될 때까지 대기 후 필터링
-                setTimeout(() => {
-                    filterReservations();
-                }, 100);
+                // Safari 호환성을 위해 requestAnimationFrame 사용
+                if (window.requestAnimationFrame) {
+                    requestAnimationFrame(function() {
+                        requestAnimationFrame(function() {
+                            filterReservations();
+                        });
+                    });
+                } else {
+                    // requestAnimationFrame이 없는 경우 setTimeout 사용
+                    setTimeout(function() {
+                        filterReservations();
+                    }, 200);
+                }
                 break;
             case 'balls':
                 await loadBallInventory();
@@ -1122,13 +1142,14 @@ async function loadReservations() {
         }
         
         // 같은 날짜면 코트번호로 정렬 (오름차순)
-        const courtA = parseInt(a.aq_courts?.court_number || '0');
-        const courtB = parseInt(b.aq_courts?.court_number || '0');
+        // Safari 호환성을 위해 optional chaining 대신 명시적 체크 사용
+        const courtA = parseInt((a.aq_courts && a.aq_courts.court_number) || '0');
+        const courtB = parseInt((b.aq_courts && b.aq_courts.court_number) || '0');
         
         // 코트번호가 숫자가 아닌 경우 문자열로 비교
         if (isNaN(courtA) || isNaN(courtB)) {
-            const courtStrA = a.aq_courts?.court_number || '';
-            const courtStrB = b.aq_courts?.court_number || '';
+            const courtStrA = (a.aq_courts && a.aq_courts.court_number) || '';
+            const courtStrB = (b.aq_courts && b.aq_courts.court_number) || '';
             return courtStrA.localeCompare(courtStrB);
         }
         
@@ -1381,10 +1402,14 @@ function renderReservationsTable() {
         const startTime = reservation.start_time;
         const simpleTime = startTime ? `${parseInt(startTime.split(':')[0])}시` : '-';
         
+        // Safari 호환성을 위해 optional chaining 대신 명시적 체크 사용
+        const courtName = (reservation.aq_courts && reservation.aq_courts.name) || '알 수 없는 코트';
+        const memberName = (reservation.aq_members && reservation.aq_members.name) || '알 수 없는 회원';
+        
         row.innerHTML = `
             <td>${reservation.reservation_date}</td>
-            <td>${reservation.aq_courts?.name || '알 수 없는 코트'}</td>
-            <td>${reservation.aq_members?.name || '알 수 없는 회원'}</td>
+            <td>${courtName}</td>
+            <td>${memberName}</td>
             <td>${gameDateWithDay}</td>
             <td>${simpleTime}</td>
             <td>
@@ -1773,9 +1798,13 @@ function filterReservations() {
         return;
     }
     
-    const dateFilter = document.getElementById('reservationDateFilter')?.value || '';
-    const courtFilter = document.getElementById('courtFilter')?.value || '';
-    const statusFilter = document.getElementById('statusFilter')?.value || '';
+    // Safari 호환성을 위해 optional chaining 대신 명시적 체크 사용
+    const dateFilterEl = document.getElementById('reservationDateFilter');
+    const courtFilterEl = document.getElementById('courtFilter');
+    const statusFilterEl = document.getElementById('statusFilter');
+    const dateFilter = (dateFilterEl && dateFilterEl.value) || '';
+    const courtFilter = (courtFilterEl && courtFilterEl.value) || '';
+    const statusFilter = (statusFilterEl && statusFilterEl.value) || '';
     
     let filteredReservations = reservations;
     
@@ -1838,10 +1867,14 @@ function filterReservations() {
         const startTime = reservation.start_time;
         const simpleTime = startTime ? `${parseInt(startTime.split(':')[0])}시` : '-';
         
+        // Safari 호환성을 위해 optional chaining 대신 명시적 체크 사용
+        const courtName = (reservation.aq_courts && reservation.aq_courts.name) || '알 수 없는 코트';
+        const memberName = (reservation.aq_members && reservation.aq_members.name) || '알 수 없는 회원';
+        
         row.innerHTML = `
             <td>${reservation.reservation_date}</td>
-            <td>${reservation.aq_courts?.name || '알 수 없는 코트'}</td>
-            <td>${reservation.aq_members?.name || '알 수 없는 회원'}</td>
+            <td>${courtName}</td>
+            <td>${memberName}</td>
             <td>${gameDateWithDay}</td>
             <td>${simpleTime}</td>
             <td>
