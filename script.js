@@ -426,10 +426,12 @@ async function switchTab(tabName) {
                 }
                 break;
             case 'balls':
+                await loadMembers();
                 await loadBallInventory();
                 renderBallInventoryTable();
                 break;
             case 'ball-usage':
+            await loadMembers();
             await loadBallUsageRecords();
             // 임시 저장 초기화
             tempTodayUsage = {};
@@ -1916,6 +1918,27 @@ async function loadBallInventory() {
     return ballInventory;
 }
 
+/** 볼 재고/사용기록 공통: 닉네임 비교용 정규화 */
+function normalizeMemberBallLabel(s) {
+    return (s || '').trim().normalize('NFC');
+}
+
+/** 볼 재고 추가 시 선택 가능한 지정 회원(우럭·조강타 별칭 포함) */
+function isBallInventoryAllowedMember(member) {
+    const allowed = new Set(
+        ['거북코', '참치', '청새치', '우럭', '조강타'].map(normalizeMemberBallLabel)
+    );
+    return allowed.has(normalizeMemberBallLabel(member.name));
+}
+
+/** 볼 사용기록(오늘 입력) 표시: 남은 재고가 있거나, 볼 재고 지정 회원이면 포함 */
+function memberEligibleForBallUsageInput(member) {
+    const hasStock = ballInventory.some(
+        inv => inv.member_id === member.id && inv.available_quantity > 0
+    );
+    return hasStock || isBallInventoryAllowedMember(member);
+}
+
 // 볼 재고 테이블 렌더링
 function renderBallInventoryTable() {
     const tbody = document.getElementById('ballInventoryTableBody');
@@ -2161,13 +2184,7 @@ function renderBallUsageInputTable() {
     // 오늘 날짜
     const today = new Date().toISOString().split('T')[0];
     
-    // 볼이 있는 회원들만 필터링
-    const membersWithBalls = members.filter(member => {
-        return ballInventory.some(inventory => 
-            inventory.member_id === member.id && 
-            inventory.available_quantity > 0
-        );
-    });
+    const membersWithBalls = members.filter(memberEligibleForBallUsageInput);
 
     membersWithBalls.forEach(member => {
         // 해당 회원의 오늘 사용 기록 찾기 (데이터베이스에서)
@@ -2575,13 +2592,7 @@ async function updateAvailableQuantity() {
 function filterBallUsage() {
     const memberFilter = document.getElementById('memberFilter').value;
     
-    // 볼이 있는 회원들만 필터링
-    let membersWithBalls = members.filter(member => {
-        return ballInventory.some(inventory => 
-            inventory.member_id === member.id && 
-            inventory.available_quantity > 0
-        );
-    });
+    let membersWithBalls = members.filter(memberEligibleForBallUsageInput);
     
     // 회원 필터 적용
     if (memberFilter) {
@@ -2732,13 +2743,7 @@ function updateSelectOptions() {
             select.innerHTML = selectId === 'memberFilter' || selectId === 'historyMemberFilter' ? '<option value="">모든 회원</option>' : '<option value="">회원을 선택하세요</option>';
             
             if (selectId === 'usageMember') {
-                // 볼 사용기록에서는 볼이 있는 회원만 표시
-                const membersWithBalls = members.filter(member => {
-                    return ballInventory.some(inventory => 
-                        inventory.member_id === member.id && 
-                        inventory.available_quantity > 0
-                    );
-                });
+                const membersWithBalls = members.filter(memberEligibleForBallUsageInput);
                 
                 membersWithBalls.forEach(member => {
                 const option = document.createElement('option');
@@ -2747,9 +2752,7 @@ function updateSelectOptions() {
                     select.appendChild(option);
                 });
             } else if (selectId === 'inventoryMember') {
-                // 볼 재고 수정에서는 지정한 3명만 노출
-                const allowedNames = new Set(['거북코', '참치', '청새치', '우럭']);
-                const allowedMembers = members.filter(member => allowedNames.has(member.name));
+                const allowedMembers = members.filter(isBallInventoryAllowedMember);
 
                 allowedMembers.forEach(member => {
                     const option = document.createElement('option');

@@ -136,6 +136,12 @@ body {
     font-size: 1.8rem;
 }
 
+.ball-inventory-hint {
+    color: #6c757d;
+    font-size: 0.95rem;
+    margin: -1rem 0 1.25rem 0;
+}
+
 /* 버튼 스타일 */
 .btn {
     padding: 0.75rem 1.5rem;
