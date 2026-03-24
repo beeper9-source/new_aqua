@@ -2748,7 +2748,7 @@ function updateSelectOptions() {
                 });
             } else if (selectId === 'inventoryMember') {
                 // 볼 재고 수정에서는 지정한 3명만 노출
-                const allowedNames = new Set(['거북코', '참치', '청새치']);
+                const allowedNames = new Set(['거북코', '참치', '청새치', '우럭']);
                 const allowedMembers = members.filter(member => allowedNames.has(member.name));
 
                 allowedMembers.forEach(member => {
