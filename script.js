@@ -1169,22 +1169,22 @@ function getDayOfWeek(dateString) {
     return days[date.getDay()];
 }
 
-// 주차 계산 (월요일 시작, 1주차 기준)
-function getWeekOfMonthMondayBased(date) {
-    // 해당 달의 첫 번째 월요일을 찾는다
+// 월 주차: 해당 달의 첫 수요일을 1주차 시작으로 하고, 수~화 7일을 한 주로 센다.
+// 첫 수요일 이전 날짜는 1주차로 간주 (차주 세팅·담당 조 매칭과 맞춤).
+function getWeekOfMonthWednesdayBased(date) {
     const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    const firstOfMonth = new Date(d.getFullYear(), d.getMonth(), 1);
-    const firstDow = firstOfMonth.getDay(); // 0=일..1=월
-    const daysUntilFirstMonday = (8 - firstDow) % 7 || 7; // 첫 월요일까지 남은 일수 (1일이 월요일이면 7 -> 아래서 보정)
-    let firstMonday = new Date(d.getFullYear(), d.getMonth(), 1 + ((firstDow === 1) ? 0 : daysUntilFirstMonday));
+    const year = d.getFullYear();
+    const month = d.getMonth();
+    const firstOfMonth = new Date(year, month, 1);
+    const dow = firstOfMonth.getDay(); // 0=일 … 3=수
+    const daysUntilFirstWednesday = (3 - dow + 7) % 7;
+    const firstWednesday = new Date(year, month, 1 + daysUntilFirstWednesday);
 
-    // 1일이 월요일이면 daysUntilFirstMonday 계산이 7이 되어버리므로 보정
-    if (firstDow === 1) firstMonday = new Date(d.getFullYear(), d.getMonth(), 1);
+    if (d < firstWednesday) {
+        return 1;
+    }
 
-    // 해당 날짜가 첫 월요일 이전이라도 1주차로 간주
-    if (d < firstMonday) return 1;
-
-    const diffDays = Math.floor((d - firstMonday) / (1000 * 60 * 60 * 24));
+    const diffDays = Math.floor((d - firstWednesday) / (1000 * 60 * 60 * 24));
     return Math.floor(diffDays / 7) + 1;
 }
 
@@ -1218,13 +1218,12 @@ async function setupNextWeekReservations() {
         if (!members.length) await loadMembers();
         if (!courts.length) await loadCourts();
 
-    const nextMonday = getNextMonday(new Date());
-    const weekOfMonth = getWeekOfMonthMondayBased(nextMonday);
-    const targetWeekNum = weekOfMonth;
-
-        // 차주 수요일(+3), 목요일(+4)
+        const nextMonday = getNextMonday(new Date());
+        // 차주 수요일(+3), 목요일(+4) — 주차는 예약일(수요일) 기준, 달의 첫 수요일부터 수~화 단위로 계산
         const wed = addDays(nextMonday, 3);
         const thu = addDays(nextMonday, 4);
+        const weekOfMonth = getWeekOfMonthWednesdayBased(wed);
+        const targetWeekNum = weekOfMonth;
         const targetDates = [toDateStr(wed), toDateStr(thu)];
 
     // 대상 회원 필터: reservation_group 내 숫자만 파싱하여 비교
