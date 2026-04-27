@@ -1169,22 +1169,22 @@ function getDayOfWeek(dateString) {
     return days[date.getDay()];
 }
 
-// 월 주차: 해당 달의 첫 수요일을 1주차 시작으로 하고, 수~화 7일을 한 주로 센다.
-// 첫 수요일 이전 날짜는 1주차로 간주 (차주 세팅·담당 조 매칭과 맞춤).
-function getWeekOfMonthWednesdayBased(date) {
+// 월 주차: 해당 달의 첫 월요일을 1주차 시작으로 하고, 월~일 7일을 한 주로 센다.
+// 첫 월요일 이전 날짜는 1주차로 간주 (차주 세팅·담당 조 매칭).
+function getWeekOfMonthMondayBased(date) {
     const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     const year = d.getFullYear();
     const month = d.getMonth();
     const firstOfMonth = new Date(year, month, 1);
-    const dow = firstOfMonth.getDay(); // 0=일 … 3=수
-    const daysUntilFirstWednesday = (3 - dow + 7) % 7;
-    const firstWednesday = new Date(year, month, 1 + daysUntilFirstWednesday);
+    const dow = firstOfMonth.getDay(); // 0=일 … 1=월
+    const daysUntilFirstMonday = (1 - dow + 7) % 7;
+    const firstMonday = new Date(year, month, 1 + daysUntilFirstMonday);
 
-    if (d < firstWednesday) {
+    if (d < firstMonday) {
         return 1;
     }
 
-    const diffDays = Math.floor((d - firstWednesday) / (1000 * 60 * 60 * 24));
+    const diffDays = Math.floor((d - firstMonday) / (1000 * 60 * 60 * 24));
     return Math.floor(diffDays / 7) + 1;
 }
 
@@ -1219,10 +1219,10 @@ async function setupNextWeekReservations() {
         if (!courts.length) await loadCourts();
 
         const nextMonday = getNextMonday(new Date());
-        // 차주 수요일(+3), 목요일(+4) — 주차는 예약일(수요일) 기준, 달의 첫 수요일부터 수~화 단위로 계산
+        // 차주 수요일(+3), 목요일(+4) — 주차는 예약일(수요일) 기준, 달의 첫 월요일부터 월~일 단위로 계산
         const wed = addDays(nextMonday, 3);
         const thu = addDays(nextMonday, 4);
-        const weekOfMonth = getWeekOfMonthWednesdayBased(wed);
+        const weekOfMonth = getWeekOfMonthMondayBased(wed);
         const targetWeekNum = weekOfMonth;
         const targetDates = [toDateStr(wed), toDateStr(thu)];
 
